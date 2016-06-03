@@ -6,7 +6,7 @@
   ],
   "description": "cryptography module for cryptpad",
   "dependencies": {
-    "tweetnacl": "~2.1.3"
+    "tweetnacl": "~0.12.2"
   },
   "main": "crypto.js",
   "keywords": [
