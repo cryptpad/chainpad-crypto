@@ -49,5 +49,17 @@ define([
         return rand64(18);
     };
 
+    var createEncryptor = module.exports.createEncryptor = function (str) {
+        var key = parseKey(str).cryptKey;
+        return {
+            encrypt: function (msg) {
+                return encrypt(msg, key);
+            },
+            decrypt: function (msg) {
+                return decrypt(msg, key);
+            }
+        };
+    };
+
     return module.exports;
 });
