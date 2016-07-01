@@ -31,14 +31,19 @@ define([
     };
 
     var parseKey = module.exports.parseKey = function (str) {
-        var array = Nacl.util.decodeBase64(str);
-        var hash = Nacl.hash(array);
-        var lk = hash.subarray(32);
-        return {
-            lookupKey: lk,
-            cryptKey: hash.subarray(0,32),
-            channel: Nacl.util.encodeBase64(lk).substring(0,10)
-        };
+        try {
+            var array = Nacl.util.decodeBase64(str);
+            var hash = Nacl.hash(array);
+            var lk = hash.subarray(32);
+            return {
+                lookupKey: lk,
+                cryptKey: hash.subarray(0,32),
+                channel: Nacl.util.encodeBase64(lk).substring(0,10)
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.parseKey] invalid string supplied');
+            throw err;
+        }
     };
 
     var rand64 = module.exports.rand64 = function (bytes) {
