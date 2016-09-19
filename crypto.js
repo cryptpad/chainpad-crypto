@@ -54,8 +54,39 @@ define([
         return rand64(18);
     };
 
-    var createEncryptor = module.exports.createEncryptor = function (str) {
-        var key = parseKey(str).cryptKey;
+    var b64Encode = function (bytes) {
+        return Nacl.util.encodeBase64(bytes).replace(/\//g, '-').replace(/=+$/g, '');
+    };
+
+    var b64Decode = function (str) {
+        return Nacl.util.decodeBase64(str.replace(/\-/g, '/'));
+    };
+
+    var b64RemoveSlashes = module.exports.b64RemoveSlashes = function (str) {
+        return str.replace(/\//g, '-');
+    };
+
+    var b64AddSlashes = module.exports.b64AddSlashes = function (str) {
+        return str.replace(/\-/g, '/');
+    };
+
+    var createEncryptor = module.exports.createEncryptor = function (input) {
+        if (typeof input === 'object') {
+            var out = {};
+            var key = input.cryptKey;
+            if (input.signKey) {
+                var signKey = Nacl.util.decodeBase64(input.signKey);
+                out.encrypt = function (msg) {
+                    return Nacl.util.encodeBase64(Nacl.sign(Nacl.util.decodeUTF8(encrypt(msg, key)), signKey));
+                };
+            }
+            //var validateKey = Nacl.util.decodeBase64(input.validateKey); managed by the server
+            out.decrypt = function (msg) {
+                return decrypt(msg, key);
+            }
+            return out;
+        }
+        var key = parseKey(input).cryptKey;
         return {
             encrypt: function (msg) {
                 return encrypt(msg, key);
@@ -64,6 +95,41 @@ define([
                 return decrypt(msg, key);
             }
         };
+    };
+
+    var createEditCryptor = module.exports.createEditCryptor = function (keyStr) {
+        try {
+            if (!keyStr) {
+                keyStr = Nacl.util.encodeBase64(Nacl.randomBytes(18));
+            }
+            var hash = Nacl.hash(Nacl.util.decodeBase64(keyStr));
+            var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
+            var cryptKey = hash.subarray(32, 64);
+            return {
+                editKeyStr: keyStr,
+                signKey: Nacl.util.encodeBase64(signKp.secretKey),
+                validateKey: Nacl.util.encodeBase64(signKp.publicKey),
+                cryptKey: cryptKey,
+                viewKeyStr: b64Encode(cryptKey)
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            throw err;
+        }
+    };
+    var createViewCryptor = module.exports.createViewCryptor = function (cryptKeyStr) {
+        try {
+            if (!cryptKeyStr) {
+                throw new Error("Cannot open a new pad in read-only mode!");
+            }
+            return {
+                cryptKey: Nacl.util.decodeBase64(cryptKeyStr),
+                viewKeyStr: cryptKeyStr
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            throw err;
+        }
     };
 
     return module.exports;
