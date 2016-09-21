@@ -80,10 +80,13 @@ define([
                     return Nacl.util.encodeBase64(Nacl.sign(Nacl.util.decodeUTF8(encrypt(msg, key)), signKey));
                 };
             }
-            //var validateKey = Nacl.util.decodeBase64(input.validateKey); managed by the server
-            out.decrypt = function (msg) {
-                return decrypt(msg, key);
-            }
+            out.decrypt = function (msg, validateKey) {
+                if (!validateKey) {
+                    return decrypt(msg, key);
+                }
+                var vKey = Nacl.util.decodeBase64(validateKey);
+                return decrypt(Nacl.util.encodeUTF8(Nacl.sign.open(Nacl.util.decodeBase64(msg), vKey)), key);
+            };
             return out;
         }
         var key = parseKey(input).cryptKey;
