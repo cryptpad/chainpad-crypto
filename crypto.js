@@ -3,6 +3,7 @@ define([
 ], function () {
     var Nacl = window.nacl;
     var module = { exports: {} };
+    module.exports.Nacl = Nacl;
 
     var encryptStr = function (str, key) {
         var array = Nacl.util.decodeUTF8(str);
@@ -100,10 +101,14 @@ define([
         };
     };
 
-    var createEditCryptor = module.exports.createEditCryptor = function (keyStr) {
+    var createEditCryptor = module.exports.createEditCryptor = function (keyStr, seed) {
         try {
             if (!keyStr) {
-                keyStr = Nacl.util.encodeBase64(Nacl.randomBytes(18));
+                if (seed && !seed.length === 18) {
+                    throw new Error('expected supplied seed to have length of 18');
+                }
+                else if (!seed) { seed = Nacl.randomBytes(18); }
+                keyStr = Nacl.util.encodeBase64(seed);
             }
             var hash = Nacl.hash(Nacl.util.decodeBase64(keyStr));
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
