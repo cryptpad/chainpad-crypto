@@ -85,8 +85,8 @@ define([
                 if (!validateKey) {
                     return decrypt(msg, key);
                 }
-                var vKey = Nacl.util.decodeBase64(validateKey);
-                return decrypt(Nacl.util.encodeUTF8(Nacl.sign.open(Nacl.util.decodeBase64(msg), vKey)), key);
+                // .slice(64) remove the signature since it's taking lots of time and it's already checked server-side
+                return decrypt(Nacl.util.encodeUTF8(Nacl.util.decodeBase64(msg).slice(64)), key);
             };
             return out;
         }
