@@ -86,7 +86,7 @@ define([
                     return decrypt(msg, key);
                 }
                 // .slice(64) remove the signature since it's taking lots of time and it's already checked server-side
-                return decrypt(Nacl.util.encodeUTF8(Nacl.util.decodeBase64(msg).slice(64)), key);
+                return decrypt(Nacl.util.encodeUTF8(Nacl.util.decodeBase64(msg).subarray(64)), key);
             };
             return out;
         }
