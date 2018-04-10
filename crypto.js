@@ -81,12 +81,17 @@ define([
                     return Nacl.util.encodeBase64(Nacl.sign(Nacl.util.decodeUTF8(encrypt(msg, key)), signKey));
                 };
             }
-            out.decrypt = function (msg, validateKey) {
+            out.decrypt = function (msg, validateKey, skipCheck) {
                 if (!validateKey) {
                     return decrypt(msg, key);
                 }
-                // .slice(64) remove the signature since it's taking lots of time and it's already checked server-side
-                return decrypt(Nacl.util.encodeUTF8(Nacl.util.decodeBase64(msg).subarray(64)), key);
+                // .subarray(64) remove the signature since it's taking lots of time and it's already checked server-side.
+                // We only need to check when the message is not coming from history keeper
+                var validated = (skipCheck || typeof validateKey !== "string")
+                                    ? Nacl.util.decodeBase64(msg).subarray(64)
+                                    : Nacl.sign.open(Nacl.util.decodeBase64(msg), Nacl.util.decodeBase64(validateKey));
+                if (!validated) { return; }
+                return decrypt(Nacl.util.encodeUTF8(validated), key);
             };
             return out;
         }
