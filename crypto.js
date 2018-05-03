@@ -145,5 +145,69 @@ define([
         }
     };
 
+    var createViewCryptor2 = module.exports.createViewCryptor2 = function (viewKeyStr, password) {
+        try {
+            if (!viewKeyStr) {
+                throw new Error("Cannot open a new pad in read-only mode!");
+            }
+            var seed = b64Decode(viewKeyStr);
+            var superSeed = seed;
+            if (password) {
+                var pwKey = Nacl.util.decodeUTF8(password);
+                superSeed = new Uint8Array(seed.length + pwKey.length);
+                superSeed.set(pwKey);
+                superSeed.set(seed, pwKey.length);
+            }
+            var hash = Nacl.hash(superSeed);
+            var chanId = hash.subarray(0,16);
+            var cryptKey = hash.subarray(16, 48);
+            return {
+                viewKeyStr: viewKeyStr,
+                cryptKey: cryptKey,
+                chanId: b64Encode(chanId)
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            throw err;
+        }
+    };
+    var createEditCryptor2 = module.exports.createEditCryptor2 = function (keyStr, seed, password) {
+        try {
+            if (!keyStr) {
+                if (seed && !seed.length === 18) {
+                    throw new Error('expected supplied seed to have length of 18');
+                }
+                else if (!seed) { seed = Nacl.randomBytes(18); }
+                keyStr = b64Encode(seed);
+            }
+            if (!seed) {
+                seed = b64Decode(keyStr);
+            }
+            var superSeed = seed;
+            if (password) {
+                var pwKey = Nacl.util.decodeUTF8(password);
+                superSeed = new Uint8Array(seed.length + pwKey.length);
+                superSeed.set(pwKey);
+                superSeed.set(seed, pwKey.length);
+            }
+            var hash = Nacl.hash(superSeed);
+            var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
+            var seed2 = hash.subarray(32, 64);
+            var viewKeyStr = b64Encode(seed2);
+            var viewCryptor = createViewCryptor2(viewKeyStr, password);
+            return {
+                editKeyStr: keyStr,
+                viewKeyStr: viewKeyStr,
+                signKey: Nacl.util.encodeBase64(signKp.secretKey),
+                validateKey: Nacl.util.encodeBase64(signKp.publicKey),
+                cryptKey: viewCryptor.cryptKey,
+                chanId: viewCryptor.chanId
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            throw err;
+        }
+    };
+
     return module.exports;
 });
