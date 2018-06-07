@@ -140,7 +140,7 @@ define([
                 viewKeyStr: cryptKeyStr
             };
         } catch (err) {
-            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            console.error('[chainpad-crypto.createViewCryptor] invalid string supplied');
             throw err;
         }
     };
@@ -167,7 +167,7 @@ define([
                 chanId: b64Encode(chanId)
             };
         } catch (err) {
-            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            console.error('[chainpad-crypto.createViewCryptor2] invalid string supplied');
             throw err;
         }
     };
@@ -204,7 +204,38 @@ define([
                 chanId: viewCryptor.chanId
             };
         } catch (err) {
-            console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
+            console.error('[chainpad-crypto.createEditCryptor2] invalid string supplied');
+            throw err;
+        }
+    };
+
+    var createFileCryptor2 = module.exports.createFileCryptor2 = function (keyStr, password) {
+        try {
+            var seed;
+            if (!keyStr) {
+                seed = Nacl.randomBytes(18);
+                keyStr = b64Encode(seed);
+            }
+            if (!seed) {
+                seed = b64Decode(keyStr);
+            }
+            var superSeed = seed;
+            if (password) {
+                var pwKey = Nacl.util.decodeUTF8(password);
+                superSeed = new Uint8Array(seed.length + pwKey.length);
+                superSeed.set(pwKey);
+                superSeed.set(seed, pwKey.length);
+            }
+            var hash = Nacl.hash(superSeed);
+            var chanId = hash.subarray(0,24);
+            var cryptKey = hash.subarray(24, 56);
+            return {
+                fileKeyStr: keyStr,
+                cryptKey: cryptKey,
+                chanId: b64Encode(chanId)
+            };
+        } catch (err) {
+            console.error('[chainpad-crypto.createFileCryptor2] invalid string supplied');
             throw err;
         }
     };
