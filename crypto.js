@@ -1,8 +1,9 @@
 (function () {
     'use strict';
 var factory = function (Nacl) {
-    var module = { exports: {} };
-    module.exports.Nacl = Nacl;
+    var Crypto = {
+        Nacl: Nacl
+    };
 
     var encryptStr = function (str, key) {
         var array = Nacl.util.decodeUTF8(str);
@@ -22,15 +23,15 @@ var factory = function (Nacl) {
         return Nacl.util.encodeUTF8(unpacked);
     };
 
-    var encrypt = module.exports.encrypt = function (msg, key) {
+    var encrypt = Crypto.encrypt = function (msg, key) {
         return encryptStr(msg, key);
     };
 
-    var decrypt = module.exports.decrypt = function (msg, key) {
+    var decrypt = Crypto.decrypt = function (msg, key) {
         return decryptStr(msg, key);
     };
 
-    var parseKey = module.exports.parseKey = function (str) {
+    var parseKey = Crypto.parseKey = function (str) {
         try {
             var array = Nacl.util.decodeBase64(str);
             var hash = Nacl.hash(array);
@@ -46,11 +47,11 @@ var factory = function (Nacl) {
         }
     };
 
-    var rand64 = module.exports.rand64 = function (bytes) {
+    var rand64 = Crypto.rand64 = function (bytes) {
         return Nacl.util.encodeBase64(Nacl.randomBytes(bytes));
     };
 
-    var genKey = module.exports.genKey = function () {
+    Crypto.genKey = function () {
         return rand64(18);
     };
 
@@ -62,18 +63,19 @@ var factory = function (Nacl) {
         return Nacl.util.decodeBase64(str.replace(/\-/g, '/'));
     };
 
-    var b64RemoveSlashes = module.exports.b64RemoveSlashes = function (str) {
+    Crypto.b64RemoveSlashes = function (str) {
         return str.replace(/\//g, '-');
     };
 
-    var b64AddSlashes = module.exports.b64AddSlashes = function (str) {
+    Crypto.b64AddSlashes = function (str) {
         return str.replace(/\-/g, '/');
     };
 
-    var createEncryptor = module.exports.createEncryptor = function (input) {
+    Crypto.createEncryptor = function (input) {
+        var key;
         if (typeof input === 'object') {
             var out = {};
-            var key = input.cryptKey;
+            key = input.cryptKey;
             if (input.signKey) {
                 var signKey = Nacl.util.decodeBase64(input.signKey);
                 out.encrypt = function (msg) {
@@ -94,7 +96,7 @@ var factory = function (Nacl) {
             };
             return out;
         }
-        var key = parseKey(input).cryptKey;
+        key = parseKey(input).cryptKey;
         return {
             encrypt: function (msg) {
                 return encrypt(msg, key);
@@ -105,10 +107,10 @@ var factory = function (Nacl) {
         };
     };
 
-    var createEditCryptor = module.exports.createEditCryptor = function (keyStr, seed) {
+    Crypto.createEditCryptor = function (keyStr, seed) {
         try {
             if (!keyStr) {
-                if (seed && !seed.length === 18) {
+                if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
                 else if (!seed) { seed = Nacl.randomBytes(18); }
@@ -129,7 +131,7 @@ var factory = function (Nacl) {
             throw err;
         }
     };
-    var createViewCryptor = module.exports.createViewCryptor = function (cryptKeyStr) {
+    Crypto.createViewCryptor = function (cryptKeyStr) {
         try {
             if (!cryptKeyStr) {
                 throw new Error("Cannot open a new pad in read-only mode!");
@@ -144,7 +146,7 @@ var factory = function (Nacl) {
         }
     };
 
-    var createViewCryptor2 = module.exports.createViewCryptor2 = function (viewKeyStr, password) {
+    var createViewCryptor2 = Crypto.createViewCryptor2 = function (viewKeyStr, password) {
         try {
             if (!viewKeyStr) {
                 throw new Error("Cannot open a new pad in read-only mode!");
@@ -170,10 +172,10 @@ var factory = function (Nacl) {
             throw err;
         }
     };
-    var createEditCryptor2 = module.exports.createEditCryptor2 = function (keyStr, seed, password) {
+    Crypto.createEditCryptor2 = function (keyStr, seed, password) {
         try {
             if (!keyStr) {
-                if (seed && !seed.length === 18) {
+                if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
                 else if (!seed) { seed = Nacl.randomBytes(18); }
@@ -208,7 +210,7 @@ var factory = function (Nacl) {
         }
     };
 
-    var createFileCryptor2 = module.exports.createFileCryptor2 = function (keyStr, password) {
+    Crypto.createFileCryptor2 = function (keyStr, password) {
         try {
             var seed;
             if (!keyStr) {
@@ -239,7 +241,7 @@ var factory = function (Nacl) {
         }
     };
 
-    return module.exports;
+    return Crypto;
 };
 
     if (typeof(module) !== 'undefined' && module.exports) {
