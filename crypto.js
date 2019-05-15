@@ -334,6 +334,115 @@ var factory = function (Nacl) {
         };
     };
 
+/*  Mailbox encryption
+
+Assuming an API for appending messages to a public append-only log...
+Define an encryption scheme which:
+1. protects the plaintexts of appended messages from all but their authors and the holder of an asymmetric keypair
+2. optionally proves authorship of the message to the recipient
+3. guarantees unlinkability of appended ciphertexts in the absence of the private key
+
+Accomplish this by:
+1. encrypting a message with the recipient's public key and your own private key
+2. encrypting the resulting ciphertext with an ephemeral key
+
+Use-cases...
+1. leave a message for a friend
+2. publish a post to a private mailing list
+3. submit private data to a public form
+4. cast an authenticated vote in public
+5. use the public log as a mixnet, leaving messages for undisclosed recipients
+
+*/
+
+    var u8_concat = function (A) {
+        // expect a list of uint8Arrays
+        var length = 0;
+        A.forEach(function (a) { length += a.length; });
+        var total = new Uint8Array(length);
+
+        var offset = 0;
+        A.forEach(function (a) {
+            total.set(a, offset);
+            offset += a.length;
+        });
+        return total;
+    };
+
+    var u8_slice = function (A, start, end) {
+        return new Uint8Array(Array.prototype.slice.call(A, start, end));
+    };
+
+    // INTERNAL USE ONLY
+    var asymmetric_encrypt = function (u8_plain, keys) {
+        // generate a random nonce
+        var u8_nonce = Nacl.randomBytes(Nacl.box.nonceLength);
+
+        // basic symmetric encryption using named parameters to avoid misuse
+        var u8_cipher = Nacl.box(
+            u8_plain,
+            u8_nonce,
+            keys.their_public,
+            keys.my_private
+        );
+
+        /*  bundle the necessary paramaters into a single Uint8Array.
+            order the nonce first in case we ever want to refer use the first
+            n bytes of a ciphertext to identify messages.  */
+        var u8_bundle = u8_concat([
+            u8_nonce, // 24 uint8s
+            keys.their_public, // 32 uint8s
+            u8_cipher, // arbitrary length
+        ]);
+
+        return u8_bundle;
+    };
+
+    // INTERNAL USE ONLY
+    // throws on decryption errors
+    var asymmetric_decrypt = function (u8_bundle, keys) {
+        // parse out the nonce
+        var u8_nonce = u8_slice(u8_bundle, 0, Nacl.box.nonceLength);
+
+        // parse out the sender's public key
+        var u8_sender_public = u8_slice(
+            u8_bundle,
+            Nacl.box.nonceLength,
+            Nacl.box.nonceLength + Nacl.box.publicKeyLength
+        );
+
+        // take the remaining ciphertext
+        var u8_cipher = u8_slice(
+            u8_bundle,
+            Nacl.box.nonceLength + Nacl.box.publicKeyLength
+        );
+
+        // decrypt the ciphertext using the private key
+        var u8_plain = Nacl.box.open(
+            u8_cipher,
+            u8_nonce,
+            u8_sender_public,
+            keys.my_private
+        );
+
+        if (!u8_plain) { throw new Error('E_DECRYPTION_FAILURE'); }
+
+        // return the ciphertext and sender's public key
+        return {
+            content: u8_plain,
+            author: u8_sender_public,
+        };
+    };
+
+    var Mailbox = Crypto.Mailbox = {};
+
+    // TODO wrap up the above methods in a nice manner
+    Mailbox.createEncryptor = function () {
+        asymmetric_decrypt = asymmetric_decrypt;
+        asymmetric_encrypt = asymmetric_encrypt;
+    };
+
+
     return Crypto;
 };
 
