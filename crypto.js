@@ -1,7 +1,6 @@
-define([
-    '/bower_components/tweetnacl/nacl-fast.min.js',
-], function () {
-    var Nacl = window.nacl;
+(function () {
+    'use strict';
+var factory = function (Nacl) {
     var module = { exports: {} };
     module.exports.Nacl = Nacl;
 
@@ -241,4 +240,18 @@ define([
     };
 
     return module.exports;
-});
+};
+
+    if (typeof(module) !== 'undefined' && module.exports) {
+        module.exports = factory(require('tweetnacl'));
+    } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
+        define([
+            '/bower_components/tweetnacl/nacl-fast.min.js',
+        ], function () {
+            return factory(window.nacl);
+        });
+    } else {
+        factory(window.nacl);
+    }
+}());
+
