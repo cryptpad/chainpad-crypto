@@ -484,11 +484,12 @@ Use-cases...
             }
         });
 
-        // TODO validate this API
         var u8_my_private = decodeBase64(keys.curvePrivate);
         var u8_my_public = decodeBase64(keys.curvePublic);
 
         return  {
+            // returns a base-64 encoded ciphertext bundle
+            // or null if decryption failed
             encrypt: function (plain, recipient) {
                 // decode the recipient's key
                 var u8_their_public = decodeBase64(recipient);
@@ -509,6 +510,8 @@ Use-cases...
                     return null;
                 }
             },
+            // return an object with content and author
+            // or null if decryption failed
             decrypt: function (cipher) {
                 // open a letter from your mailbox
                 try {
@@ -536,7 +539,7 @@ Use-cases...
             return factory(window.nacl);
         });
     } else {
-        factory(window.nacl);
+        window.chainpad_crypto = factory(window.nacl);
     }
 }());
 
