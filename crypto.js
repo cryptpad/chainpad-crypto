@@ -449,13 +449,13 @@ Use-cases...
         return encodeBase64(u8_sealed);
     };
 
-    var openSecretLetter = Mailbox.openSecretLetter = function (b64_cipher, keys) {
+    var openSecretLetter = Mailbox.openSecretLetter = function (b64_bundle, keys) {
         // transform the b64 ciphertext into a Uint8Array
-        var u8_cipher = decodeBase64(b64_cipher);
+        var u8_bundle = decodeBase64(b64_bundle);
 
         // open the sealed envelope with your private key
         // and throw away the ephemeral key used to seal it
-        var letter = asymmetric_decrypt(u8_cipher, {
+        var letter = asymmetric_decrypt(u8_bundle, {
             my_private: keys.my_private,
         });
 
