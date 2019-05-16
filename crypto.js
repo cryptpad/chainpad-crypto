@@ -373,8 +373,10 @@ Use-cases...
         return new Uint8Array(Array.prototype.slice.call(A, start, end));
     };
 
-    // INTERNAL USE ONLY
-    var asymmetric_encrypt = function (u8_plain, keys) {
+    var Mailbox = Crypto.Mailbox = {};
+
+    // throws on encryption errors
+    var asymmetric_encrypt = /* Mailbox.asymmetric_encrypt = */ function (u8_plain, keys) {
         // generate a random nonce
         var u8_nonce = Nacl.randomBytes(Nacl.box.nonceLength);
 
@@ -391,7 +393,7 @@ Use-cases...
             n bytes of a ciphertext to identify messages.  */
         var u8_bundle = u8_concat([
             u8_nonce, // 24 uint8s
-            keys.their_public, // 32 uint8s
+            keys.my_public, // 32 uint8s
             u8_cipher, // arbitrary length
         ]);
 
@@ -400,7 +402,7 @@ Use-cases...
 
     // INTERNAL USE ONLY
     // throws on decryption errors
-    var asymmetric_decrypt = function (u8_bundle, keys) {
+    var asymmetric_decrypt = /* Crypto.asymmetric_decrypt = */ function (u8_bundle, keys) {
         // parse out the nonce
         var u8_nonce = u8_slice(u8_bundle, 0, Nacl.box.nonceLength);
 
@@ -434,14 +436,107 @@ Use-cases...
         };
     };
 
-    var Mailbox = Crypto.Mailbox = {};
 
-    // TODO wrap up the above methods in a nice manner
-    Mailbox.createEncryptor = function () {
-        asymmetric_decrypt = asymmetric_decrypt;
-        asymmetric_encrypt = asymmetric_encrypt;
+    // basically acts like an envelope marked only with a delivery address
+    var sealSecretLetter = Mailbox.sealSecretLetter = function (plain, keys) {
+        // decode string into u8
+        var u8_plain = decodeUTF8(plain);
+
+        // encrypt with your permanent private key and the mailbox's public key
+        var u8_letter = asymmetric_encrypt(u8_plain, {
+            their_public: keys.their_public,
+            my_private: keys.my_private,
+            my_public: keys.my_public,
+        });
+
+        // generate an ephemeral keypair
+        var u8_ephemeral_keypair = Nacl.box.keyPair();
+
+        // seal with an ephemeral key
+        var u8_sealed = asymmetric_encrypt(u8_letter, {
+            their_public: keys.their_public,
+            my_private: u8_ephemeral_keypair.secretKey,
+            my_public: u8_ephemeral_keypair.publicKey,
+        });
+
+        // return the doubly-encrypted 'envelope' as a base64-encoded string
+        return encodeBase64(u8_sealed);
     };
 
+    var openSecretLetter = Mailbox.openSecretLetter = function (b64_cipher, keys) {
+        // transform the b64 ciphertext into a Uint8Array
+        var u8_cipher = decodeBase64(b64_cipher);
+
+        // open the sealed envelope with your private key
+        // and throw away the ephemeral key used to seal it
+        var letter = asymmetric_decrypt(u8_cipher, {
+            my_private: keys.my_private,
+        });
+
+        // read the internal content, remember its author
+        var u8_plain = asymmetric_decrypt(letter.content, {
+            my_private: keys.my_private,
+        });
+
+        // return the content and author
+        return {
+            content: encodeUTF8(u8_plain.content),
+            author: encodeBase64(u8_plain.author),
+        };
+    };
+
+    Mailbox.createEncryptor = function (keys) {
+        // validate inputs
+        if (!keys || typeof(keys) !== 'object') {
+            return void console.error("invalid Mailbox.createEncryptor keys");
+        }
+
+        ['curvePublic', 'curvePrivate'].forEach(function (k) {
+            if (typeof(keys[k]) !== 'string') {
+                console.log(k);
+                throw new Error("Expected key was not present");
+            }
+        });
+
+        // TODO validate this API
+        var u8_my_private = decodeBase64(keys.curvePrivate);
+        var u8_my_public = decodeBase64(keys.curvePublic);
+
+        return  {
+            encrypt: function (plain, recipient) {
+                // decode the recipient's key
+                var u8_their_public = decodeBase64(recipient);
+
+                // prepare an unmarked envelope for them
+                // or null if an error is thrown
+                try {
+                    var sealed = sealSecretLetter(plain, {
+                        their_public: u8_their_public,
+
+                        my_private: u8_my_private,
+                        my_public: u8_my_public,
+                    });
+                    // return the base64-encoded ciphertext "envelope"
+                    return sealed;
+                } catch (e) {
+                    console.error(e);
+                    return null;
+                }
+            },
+            decrypt: function (cipher) {
+                // open a letter from your mailbox
+                try {
+                    // return { content: UTF8, author: serializedCurve }
+                    return openSecretLetter(cipher, {
+                         my_private: u8_my_private,
+                    });
+                } catch (e) {
+                    console.error(e);
+                    return null;
+                }
+            },
+        };
+    };
 
     return Crypto;
 };
