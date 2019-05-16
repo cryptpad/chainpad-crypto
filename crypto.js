@@ -245,18 +245,18 @@ var factory = function (Nacl) {
     */
     var Curve = Crypto.Curve = {};
 
-    var concatenateUint8s = function (A) {
-        var len = 0;
+    var u8_concat = function (A) {
+        // expect a list of uint8Arrays
+        var length = 0;
+        A.forEach(function (a) { length += a.length; });
+        var total = new Uint8Array(length);
+
         var offset = 0;
-        A.forEach(function (uints) {
-            len += uints.length || 0;
+        A.forEach(function (a) {
+            total.set(a, offset);
+            offset += a.length;
         });
-        var c = new Uint8Array(len);
-        A.forEach(function (x) {
-            c.set(x, offset);
-            offset += x.length;
-        });
-        return c;
+        return total;
     };
 
     var encodeBase64 = Nacl.util.encodeBase64;
@@ -299,7 +299,7 @@ var factory = function (Nacl) {
             var salt = decodeUTF8('CryptPad.signingKeyGenerationSalt');
 
             // 64 uint8s
-            var hash = Nacl.hash(concatenateUint8s([salt, sharedSecret]));
+            var hash = Nacl.hash(u8_concat([salt, sharedSecret]));
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
             var cryptKey = hash.subarray(32, 64);
 
@@ -354,20 +354,6 @@ Use-cases...
 5. use the public log as a mixnet, leaving messages for undisclosed recipients
 
 */
-
-    var u8_concat = function (A) {
-        // expect a list of uint8Arrays
-        var length = 0;
-        A.forEach(function (a) { length += a.length; });
-        var total = new Uint8Array(length);
-
-        var offset = 0;
-        A.forEach(function (a) {
-            total.set(a, offset);
-            offset += a.length;
-        });
-        return total;
-    };
 
     var u8_slice = function (A, start, end) {
         return new Uint8Array(Array.prototype.slice.call(A, start, end));
