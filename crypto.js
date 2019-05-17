@@ -530,7 +530,10 @@ Use-cases...
     return Crypto;
 };
 
-    if (typeof(module) !== 'undefined' && module.exports) {
+    if (typeof(exports) !== 'undefined') {
+        exports = factory(require('tweetnacl'));
+    }
+    else if (typeof(module) !== 'undefined' && module.exports) {
         module.exports = factory(require('tweetnacl'));
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
         define([
