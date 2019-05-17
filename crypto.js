@@ -532,8 +532,7 @@ Use-cases...
 
     if (typeof(exports) !== 'undefined') {
         exports = factory(require('tweetnacl'));
-    }
-    else if (typeof(module) !== 'undefined' && module.exports) {
+    } else if (typeof(module) !== 'undefined' && module.exports) {
         module.exports = factory(require('tweetnacl'));
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
         define([
