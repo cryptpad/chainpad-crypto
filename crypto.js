@@ -76,28 +76,48 @@ var factory = function (Nacl) {
         return str.replace(/\-/g, '/');
     };
 
+    /*
+
+* several modes of operation:
+  * if input is not an object, use some prehistoric code
+  * otherwise
+    * get the encryption key
+    * get the signing key, if available
+    * MAYBE get a validateKey
+  * return a pair of functions: {encrypt, decrypt} which "Do The Right Thing"
+    * encrypt is not necessarily provided, depending on the parameters with which the encryptor was initialized
+    */
     Crypto.createEncryptor = function (input) {
         var key;
         if (typeof input === 'object') {
             var out = {};
             key = input.cryptKey;
+            if (!key) { throw new Error("NO_DECRYPTION_KEY_PROVIDED"); }
+
             if (input.signKey) {
-                var signKey = Nacl.util.decodeBase64(input.signKey);
+                var signKey = decodeBase64(input.signKey);
                 out.encrypt = function (msg) {
-                    return Nacl.util.encodeBase64(Nacl.sign(Nacl.util.decodeUTF8(encrypt(msg, key)), signKey));
+                    return encodeBase64(Nacl.sign(decodeUTF8(encrypt(msg, key)), signKey));
                 };
             }
+
             out.decrypt = function (msg, validateKey, skipCheck) {
-                if (!validateKey) {
-                    return decrypt(msg, key);
+                if (!validateKey && !skipCheck) {
+                    throw new Error("UNSUPPORTED_DECRYPTION_CONFIGURATION");
+                    //return decrypt(msg, key);
                 }
+
+                if (validateKey === true && !skipCheck) {
+                    console.error("UNEXPECTED_CONFIGURATION");
+                }
+
                 // .subarray(64) remove the signature since it's taking lots of time and it's already checked server-side.
                 // We only need to check when the message is not coming from history keeper
                 var validated = (skipCheck || typeof validateKey !== "string")
-                                    ? Nacl.util.decodeBase64(msg).subarray(64)
-                                    : Nacl.sign.open(Nacl.util.decodeBase64(msg), Nacl.util.decodeBase64(validateKey));
+                                    ? decodeBase64(msg).subarray(64)
+                                    : Nacl.sign.open(decodeBase64(msg), decodeBase64(validateKey));
                 if (!validated) { return; }
-                return decrypt(Nacl.util.encodeUTF8(validated), key);
+                return decrypt(encodeUTF8(validated), key);
             };
             return out;
         }
