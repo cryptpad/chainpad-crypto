@@ -2,6 +2,31 @@ var Assert = require("assert");
 var Crypto = require("./crypto");
 var Nacl = require("tweetnacl");
 
+// encrypt
+// decrypt
+// parseKey
+// rand64
+// genKey
+// b64RemoveSlashes
+// b64AddSlashes
+// createEncryptor
+// createEditCryptor
+// createViewCryptor
+// createViewCryptor2
+// createEditCryptor2
+// createFileCryptor2
+// Curve
+    // encrypt
+    // decrypt
+    // signAndEncrypt
+    // openSigned
+    // deriveKeys
+    // createEncryptor
+// [ ] Mailbox
+    // [ ] sealSecretLetter
+    // [ ] openSecretLetter
+    // [ ] createEncryptor
+
 var Alice = Nacl.box.keyPair();
 var Alice_public = Nacl.util.encodeBase64(Alice.publicKey);
 
@@ -89,7 +114,6 @@ Assert.equal(message, Bob_plaintext);
     Assert.equal(message, letter.content);
     Assert.equal(Bob_public, letter.author);
 }());
-
 
 (function () {
     // Bob wants to drop a letter in Alice' mailbox.
