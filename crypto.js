@@ -5,22 +5,27 @@ var factory = function (Nacl) {
         Nacl: Nacl
     };
 
+    var encodeBase64 = Nacl.util.encodeBase64;
+    var decodeBase64 = Nacl.util.decodeBase64;
+    var decodeUTF8 = Nacl.util.decodeUTF8;
+    var encodeUTF8 = Nacl.util.encodeUTF8;
+
     var encryptStr = function (str, key) {
-        var array = Nacl.util.decodeUTF8(str);
+        var array = decodeUTF8(str);
         var nonce = Nacl.randomBytes(24);
         var packed = Nacl.secretbox(array, nonce, key);
         if (!packed) { throw new Error(); }
-        return Nacl.util.encodeBase64(nonce) + "|" + Nacl.util.encodeBase64(packed);
+        return encodeBase64(nonce) + "|" + encodeBase64(packed);
     };
 
     var decryptStr = function (str, key) {
         var arr = str.split('|');
         if (arr.length !== 2) { throw new Error(); }
-        var nonce = Nacl.util.decodeBase64(arr[0]);
-        var packed = Nacl.util.decodeBase64(arr[1]);
+        var nonce = decodeBase64(arr[0]);
+        var packed = decodeBase64(arr[1]);
         var unpacked = Nacl.secretbox.open(packed, nonce, key);
         if (!unpacked) { throw new Error(); }
-        return Nacl.util.encodeUTF8(unpacked);
+        return encodeUTF8(unpacked);
     };
 
     var encrypt = Crypto.encrypt = function (msg, key) {
@@ -33,13 +38,13 @@ var factory = function (Nacl) {
 
     var parseKey = Crypto.parseKey = function (str) {
         try {
-            var array = Nacl.util.decodeBase64(str);
+            var array = decodeBase64(str);
             var hash = Nacl.hash(array);
             var lk = hash.subarray(32);
             return {
                 lookupKey: lk,
                 cryptKey: hash.subarray(0,32),
-                channel: Nacl.util.encodeBase64(lk).substring(0,10)
+                channel: encodeBase64(lk).substring(0,10)
             };
         } catch (err) {
             console.error('[chainpad-crypto.parseKey] invalid string supplied');
@@ -48,7 +53,7 @@ var factory = function (Nacl) {
     };
 
     var rand64 = Crypto.rand64 = function (bytes) {
-        return Nacl.util.encodeBase64(Nacl.randomBytes(bytes));
+        return encodeBase64(Nacl.randomBytes(bytes));
     };
 
     Crypto.genKey = function () {
@@ -56,11 +61,11 @@ var factory = function (Nacl) {
     };
 
     var b64Encode = function (bytes) {
-        return Nacl.util.encodeBase64(bytes).replace(/\//g, '-').replace(/=+$/g, '');
+        return encodeBase64(bytes).replace(/\//g, '-').replace(/=+$/g, '');
     };
 
     var b64Decode = function (str) {
-        return Nacl.util.decodeBase64(str.replace(/\-/g, '/'));
+        return decodeBase64(str.replace(/\-/g, '/'));
     };
 
     Crypto.b64RemoveSlashes = function (str) {
@@ -114,15 +119,15 @@ var factory = function (Nacl) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
                 else if (!seed) { seed = Nacl.randomBytes(18); }
-                keyStr = Nacl.util.encodeBase64(seed);
+                keyStr = encodeBase64(seed);
             }
-            var hash = Nacl.hash(Nacl.util.decodeBase64(keyStr));
+            var hash = Nacl.hash(decodeBase64(keyStr));
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
             var cryptKey = hash.subarray(32, 64);
             return {
                 editKeyStr: keyStr,
-                signKey: Nacl.util.encodeBase64(signKp.secretKey),
-                validateKey: Nacl.util.encodeBase64(signKp.publicKey),
+                signKey: encodeBase64(signKp.secretKey),
+                validateKey: encodeBase64(signKp.publicKey),
                 cryptKey: cryptKey,
                 viewKeyStr: b64Encode(cryptKey)
             };
@@ -137,7 +142,7 @@ var factory = function (Nacl) {
                 throw new Error("Cannot open a new pad in read-only mode!");
             }
             return {
-                cryptKey: Nacl.util.decodeBase64(cryptKeyStr),
+                cryptKey: decodeBase64(cryptKeyStr),
                 viewKeyStr: cryptKeyStr
             };
         } catch (err) {
@@ -154,7 +159,7 @@ var factory = function (Nacl) {
             var seed = b64Decode(viewKeyStr);
             var superSeed = seed;
             if (password) {
-                var pwKey = Nacl.util.decodeUTF8(password);
+                var pwKey = decodeUTF8(password);
                 superSeed = new Uint8Array(seed.length + pwKey.length);
                 superSeed.set(pwKey);
                 superSeed.set(seed, pwKey.length);
@@ -186,7 +191,7 @@ var factory = function (Nacl) {
             }
             var superSeed = seed;
             if (password) {
-                var pwKey = Nacl.util.decodeUTF8(password);
+                var pwKey = decodeUTF8(password);
                 superSeed = new Uint8Array(seed.length + pwKey.length);
                 superSeed.set(pwKey);
                 superSeed.set(seed, pwKey.length);
@@ -199,8 +204,8 @@ var factory = function (Nacl) {
             return {
                 editKeyStr: keyStr,
                 viewKeyStr: viewKeyStr,
-                signKey: Nacl.util.encodeBase64(signKp.secretKey),
-                validateKey: Nacl.util.encodeBase64(signKp.publicKey),
+                signKey: encodeBase64(signKp.secretKey),
+                validateKey: encodeBase64(signKp.publicKey),
                 cryptKey: viewCryptor.cryptKey,
                 chanId: viewCryptor.chanId
             };
@@ -222,7 +227,7 @@ var factory = function (Nacl) {
             }
             var superSeed = seed;
             if (password) {
-                var pwKey = Nacl.util.decodeUTF8(password);
+                var pwKey = decodeUTF8(password);
                 superSeed = new Uint8Array(seed.length + pwKey.length);
                 superSeed.set(pwKey);
                 superSeed.set(seed, pwKey.length);
@@ -258,11 +263,6 @@ var factory = function (Nacl) {
         });
         return total;
     };
-
-    var encodeBase64 = Nacl.util.encodeBase64;
-    var decodeBase64 = Nacl.util.decodeBase64;
-    var decodeUTF8 = Nacl.util.decodeUTF8;
-    var encodeUTF8 = Nacl.util.encodeUTF8;
 
     Curve.encrypt = function (message, secret) {
         var buffer = decodeUTF8(message);
