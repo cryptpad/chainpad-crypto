@@ -547,6 +547,162 @@ Use-cases...
         };
     };
 
+/*  Team encryption
+
+Much like mailbox encryption but intended for use cases where:
+1. a private signing key is required to write messages to a shared log
+2. a private decryption key is required to read messages
+3. authorship can be authenticated by those with the private decryption key
+4. authorship is unlinkable to anyone without the decryption key
+
+We assume:
+1. The private signing key will be distribute to privileged members of a group
+2. The private decryption key can be distributed to anyone who should be able to read messages
+3. It is safe for anyone to have the public encryption key
+4. We may want to allow either:
+    * write capabilities without read capabilities
+    * read capabilities without write capabilities
+5. The public validation key will be transmitted out of band to anyone who needs it
+
+*/
+
+    var Team = Crypto.Team = {};
+
+    var encryptForTeam = function (plain, keys) {
+        // sign(curve(curve(msg, author_curve), ephemeral_curve), signing_key)
+        var u8_plain = decodeUTF8(plain);
+
+        var u8_inner = asymmetric_encrypt(u8_plain, {
+            their_public: keys.team_curve_public,
+            my_private: keys.my_curve_private,
+            my_public: keys.my_curve_public,
+        });
+
+        var u8_ephemeral_keypair = Nacl.box.keyPair();
+
+        var u8_outer = asymmetric_encrypt(u8_inner, {
+            their_public: keys.team_curve_public,
+            my_private: u8_ephemeral_keypair.secretKey,
+            my_public: u8_ephemeral_keypair.publicKey,
+        });
+
+        return encodeBase64(Nacl.sign(u8_outer, keys.team_ed_private));
+    };
+
+    // INTERNAL USE ONLY
+    // throws on decryption or validation errors
+    var decryptForTeam = function (b64_bundle, keys, skipValidation) {
+        var u8_bundle = decodeBase64(b64_bundle);
+
+        var u8_outer;
+        if (skipValidation === true) {
+            u8_outer = u8_slice(u8_bundle, 64);
+        } else {
+            u8_outer = Nacl.sign.open(u8_bundle, keys.team_ed_public);
+        }
+
+        if (u8_outer === null) { throw new Error("E_VALIDATION_FAILURE"); }
+
+        // {content: u8, author: u8_curve_public (ephemeral) }
+        var inner = asymmetric_decrypt(u8_outer, {
+            my_private: keys.team_curve_private,
+        });
+
+        // {content: u8, author: u8_curve_public }
+        var u8_plain = asymmetric_decrypt(inner.content, {
+            my_private: keys.team_curve_private,
+        });
+
+        return {
+            content: encodeUTF8(u8_plain.content),
+            author: encodeBase64(u8_plain.author),
+        };
+    };
+
+    // external names => internal names
+    var team_key_map = {
+        teamCurvePublic: 'team_curve_public', // encrypt (to encrypt for)
+        teamCurvePrivate: 'team_curve_private', // decrypt (decryption)
+
+        myCurvePublic: 'my_curve_public', // encrypt (authorship inclusion)
+        myCurvePrivate: 'my_curve_private', // encrypt (encryption)
+
+        teamEdPublic: 'team_ed_public', // decrypt (validation)
+        teamEdPrivate: 'team_ed_private', // encrypt (signing)
+    };
+
+    var team_can_decrypt = function (K /* u8_keys */) {
+        return Boolean(
+            // team_curve_private (to read messages encrypted for the team)
+            K.team_curve_private && K.team_curve_private.length === Nacl.box.secretKeyLength &&
+            // team_sign_public (to validate that messages are signed by team members)
+            K.team_ed_public && K.team_ed_public.length === Nacl.sign.publicKeyLength
+        );
+    };
+
+    var team_can_encrypt = function (K /* u8_keys */) {
+        return Boolean(
+            // my_curve_private (for the inner authenticated encryption)
+            K.my_curve_private && K.my_curve_private.length === Nacl.box.secretKeyLength &&
+            // my_curve_public (for inclusion in the inner message)
+            K.my_curve_public && K.my_curve_public.length === Nacl.box.publicKeyLength &&
+            // team_curve_public (to encrypt for the team)
+            K.team_curve_public && K.team_curve_public.length === Nacl.box.publicKeyLength &&
+            // team_ed_private (to sign the final message)
+            K.team_ed_private && K.team_ed_private.length === Nacl.sign.secretKeyLength
+        );
+    };
+
+    // returns an object
+    // any of: {encrypt}, {decrypt}, {encrypt, decrypt}
+    // throws if it is impossible to correctly create either method
+    // encrypt and decrypt take strings as input
+    // both log and return null in the event of internal errors
+    // decrypt can optionally skip validation if you trust the source of the message
+    Team.createEncryptor = function (keys) {
+        var u8_keys = {};
+        Object.keys(team_key_map).forEach(function (k) {
+            if (!keys[k]) { return; }
+            try {
+                u8_keys[team_key_map[k]] = decodeBase64(keys[k]);
+            } catch (err) {
+                console.log(k);
+                throw new Error('INVALID_KEY_SUPPLIED');
+            }
+        });
+
+        var out = {};
+
+        if (team_can_encrypt(u8_keys)) {
+            // (utf8_string) => base64_string || null
+            out.encrypt = function (plain) {
+                try {
+                    return encryptForTeam(plain, u8_keys);
+                } catch (e) {
+                    console.error(e);
+                    return null;
+                }
+            };
+        }
+
+        if (team_can_decrypt(u8_keys)) {
+            // (base64_string, skip_validation_bool) => {content: utf8_string, author: base64_string} || null
+            out.decrypt = function (cipher, skipValidation) {
+                try {
+                    return decryptForTeam(cipher, u8_keys, skipValidation);
+                } catch (e) {
+                    console.error(e);
+                    return null;
+                }
+            };
+        }
+
+        if (Object.keys(out) === 0) { throw new Error("INVALID_TEAM_CONFIGURATION"); }
+
+        return out;
+    };
+
+
     return Crypto;
 };
 

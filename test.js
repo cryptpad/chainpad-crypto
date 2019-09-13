@@ -73,33 +73,6 @@ Assert.equal(message, Bob_plaintext);
 
 // Mailbox stuff
 
-/*
-(function () {
-    // validate internal methods
-
-    var message = "bang bang bang";
-    message = "x";
-    var u8_message = Nacl.util.decodeUTF8(message);
-
-    // bob does an asymmetric encryption for alice
-
-    var bob_cipher = Crypto._.asymmetric_encrypt(u8_message, {
-        their_public: Alice.publicKey,
-        my_public: Bob.publicKey,
-        my_private: Bob.secretKey,
-    });
-
-    var decrypted = Crypto._.asymmetric_decrypt(bob_cipher, {
-        my_private: Alice.secretKey,
-    });
-
-    //console.log(decrypted);
-
-    Assert(Boolean(decrypted));
-    Assert.equal(Nacl.util.encodeUTF8(decrypted.content), message);
-}());
-*/
-
 (function () {
     var message = "test";
     var envelope = Crypto.Mailbox.sealSecretLetter(message, {
@@ -142,10 +115,98 @@ Assert.equal(message, Bob_plaintext);
     });
 
     var alice_plaintext = Alice_cryptor.decrypt(bob_ciphertext);
-    //console.log(alice_plaintext);
 
     Assert(Boolean(alice_plaintext));
     Assert.equal('object', typeof(alice_plaintext));
 
     Assert.equal(bob_plaintext, alice_plaintext.content);
+}());
+
+var encode64 = Nacl.util.encodeBase64;
+
+var makeCurveKeys = function () {
+    var pair = Nacl.box.keyPair();
+    return {
+        public: encode64(pair.publicKey),
+        private: encode64(pair.secretKey),
+    };
+};
+
+var makeEdKeys = function () {
+    var pair = Nacl.sign.keyPair();
+    return {
+        public: encode64(pair.publicKey),
+        private: encode64(pair.secretKey),
+    };
+};
+
+(function () {
+    var Team = Crypto.Team;
+
+    var team = {
+        ed: makeEdKeys(),
+        curve: makeCurveKeys(),
+    };
+
+    // Alice has all the keys for a team
+    var alice = makeCurveKeys();
+    alice.cryptor = Team.createEncryptor({
+        teamCurvePublic: team.curve.public,
+        teamCurvePrivate: team.curve.private,
+
+        teamEdPublic: team.ed.public,
+        teamEdPrivate: team.ed.private,
+
+        myCurvePublic: alice.public,
+        myCurvePrivate: alice.private,
+    });
+
+    Assert(Boolean(alice.cryptor.encrypt));
+    Assert(Boolean(alice.cryptor.decrypt));
+
+    var plain = 'PEWPEWPEW';
+
+    var alice_ciphertext = alice.cryptor.encrypt(plain);
+    Assert(alice_ciphertext);
+
+    // Bob has the keys to read, but not write
+    var bob = makeCurveKeys();
+    bob.cryptor = Team.createEncryptor({
+        teamCurvePrivate: team.curve.private,
+        teamEdPublic: team.ed.public,
+    });
+
+    Assert(bob.cryptor.decrypt); // Bob can decrypt
+    Assert(!bob.cryptor.encrypt); // Bob can't encrypt
+
+    var bob_decrypted = bob.cryptor.decrypt(alice_ciphertext);
+
+    Assert.equal(bob_decrypted.content, plain);
+    Assert.equal(bob_decrypted.author, alice.public);
+
+    // the same thing, but skipping validation
+    bob_decrypted = bob.cryptor.decrypt(alice_ciphertext, true);
+
+    Assert.equal(bob_decrypted.content, plain);
+    Assert.equal(bob_decrypted.author, alice.public);
+
+    // Chuck has the keys to write, but not read
+    var chuck = makeCurveKeys();
+    chuck.cryptor = Team.createEncryptor({
+        myCurvePrivate: chuck.private,
+        myCurvePublic: chuck.public,
+        teamCurvePublic: team.curve.public,
+        teamEdPrivate: team.ed.private,
+    });
+
+    Assert(chuck.cryptor.encrypt);
+    Assert(!chuck.cryptor.decrypt);
+
+    var plain2 = 'PEZPEZ';
+    var chuck_ciphertext = chuck.cryptor.encrypt(plain2);
+
+    var alice_decrypted = alice.cryptor.decrypt(chuck_ciphertext);
+
+    Assert.equal(alice_decrypted.content, plain2);
+    Assert.equal(alice_decrypted.author, chuck.public);
 }());
