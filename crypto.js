@@ -697,7 +697,7 @@ We assume:
             };
         }
 
-        if (Object.keys(out) === 0) { throw new Error("INVALID_TEAM_CONFIGURATION"); }
+        if (Object.keys(out).length === 0) { throw new Error("INVALID_TEAM_CONFIGURATION"); }
 
         return out;
     };
