@@ -704,6 +704,7 @@ We assume:
             channel: encodeHex(u8_channel),
             teamCurvePublic: encodeBase64(teamCurve.publicKey),
             teamCurvePrivate: encodeBase64(teamCurve.secretKey),
+            viewKeyStr: encodeBase64(u8_seed2),
         };
     };
 
