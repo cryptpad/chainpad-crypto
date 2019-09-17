@@ -704,12 +704,12 @@ We assume:
             channel: encodeHex(u8_channel),
             teamCurvePublic: encodeBase64(teamCurve.publicKey),
             teamCurvePrivate: encodeBase64(teamCurve.secretKey),
-            viewKeyStr: encodeBase64(u8_seed2),
+            viewKeyStr: Crypto.b64RemoveSlashes(encodeBase64(u8_seed2)),
         };
     };
 
     Team.deriveGuestKeys = function (seed2) {
-        return u8_deriveGuestKeys(decodeBase64(Crypto.b64AddSlaces(seed2)));
+        return u8_deriveGuestKeys(decodeBase64(Crypto.b64AddSlashes(seed2)));
     };
 
     Team.deriveMemberKeys = function (seed1, myKeys) {
@@ -720,7 +720,7 @@ We assume:
         // my_keys => {myCurvePublic, myCurvePrivate}
         if (!team_validate_own_keys(myKeys)) { throw new Error('INVALID_OWN_KEYS'); }
 
-        var stretched = u8_stretch(decodeUTF8(seed1));
+        var stretched = u8_stretch(Crypto.b64AddSlashes(decodeBase64(seed1)));
 
         // team_ed_private, team_ed_public (distributed via historyKeeper)
         var teamEd = Nacl.sign.keyPair.fromSeed(stretched[0]);
