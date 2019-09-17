@@ -672,8 +672,8 @@ We assume:
 
     var team_validate_own_keys = function (K) {
         return Boolean(
-            K.curvePublic && decodeBase64(K.curvePublic.length) === Nacl.box.publicKeyLength &&
-            K.curvePrivate && decodeBase64(K.curvePrivate.length) === Nacl.box.secretKeyLength
+            K.curvePublic && decodeBase64(K.curvePublic).length === Nacl.box.publicKeyLength &&
+            K.curvePrivate && decodeBase64(K.curvePrivate).length === Nacl.box.secretKeyLength
         );
     };
 
@@ -712,15 +712,23 @@ We assume:
         return u8_deriveGuestKeys(decodeBase64(Crypto.b64AddSlashes(seed2)));
     };
 
+    Team.createSeed = function () {
+        return Crypto.b64AddSlashes(encodeBase64(Nacl.randomBytes(18)));
+    };
+
     Team.deriveMemberKeys = function (seed1, myKeys) {
-        if (typeof(seed1) !== 'string' || seed1.length < 18) {
-            throw new Error("INVALID_SEED");
+        var u8_seed1;
+        try {
+            u8_seed1 = decodeBase64(Crypto.b64AddSlashes(seed1));
+            if (u8_seed1.length < 18) { throw new Error("INVALID_SEED"); }
+        } catch (err) {
+            throw err;
         }
 
         // my_keys => {myCurvePublic, myCurvePrivate}
         if (!team_validate_own_keys(myKeys)) { throw new Error('INVALID_OWN_KEYS'); }
 
-        var stretched = u8_stretch(Crypto.b64AddSlashes(decodeBase64(seed1)));
+        var stretched = u8_stretch(u8_seed1);
 
         // team_ed_private, team_ed_public (distributed via historyKeeper)
         var teamEd = Nacl.sign.keyPair.fromSeed(stretched[0]);
@@ -733,8 +741,8 @@ We assume:
             myCurvePublic: myKeys.curvePublic,
             myCurvePrivate: myKeys.curvePrivate,
             // member keys (teamEdPrivate, teamEdPublic)
-            teamEdPrivate: teamEd.secretKey,
-            teamEdPublic: teamEd.publicKey,
+            teamEdPrivate: encodeBase64(teamEd.secretKey),
+            teamEdPublic: encodeBase64(teamEd.publicKey),
         }, guestKeys); // guest keys & info (channel, teamCurvePrivate, teamCurvePublic)
     };
 
