@@ -9,6 +9,23 @@ var factory = function (Nacl) {
     var decodeBase64 = Nacl.util.decodeBase64;
     var decodeUTF8 = Nacl.util.decodeUTF8;
     var encodeUTF8 = Nacl.util.encodeUTF8;
+    var encodeHex = function (bytes) {
+        var hexString = '';
+        for (var i = 0; i < bytes.length; i++) {
+            if (bytes[i] < 16) { hexString += '0'; }
+            hexString += bytes[i].toString(16);
+        }
+        return hexString;
+    };
+/*
+    var decodeHex = function (hexString) {
+        var bytes = new Uint8Array(Math.ceil(hexString.length / 2));
+        for (var i = 0; i < bytes.length; i++) {
+            bytes[i] = parseInt(hexString.substr(i * 2, 2), 16);
+        }
+        return bytes;
+    };
+*/
 
     var encryptStr = function (str, key) {
         var array = decodeUTF8(str);
@@ -651,6 +668,73 @@ We assume:
             // team_ed_private (to sign the final message)
             K.team_ed_private && K.team_ed_private.length === Nacl.sign.secretKeyLength
         );
+    };
+
+    var team_validate_own_keys = function (K) {
+        return Boolean(
+            K.curvePublic && decodeBase64(K.curvePublic.length) === Nacl.box.publicKeyLength &&
+            K.curvePrivate && decodeBase64(K.curvePrivate.length) === Nacl.box.secretKeyLength
+        );
+    };
+
+    var u8_stretch = function (u8) {
+        var hashed = Nacl.hash(u8);
+        return [
+            u8_slice(hashed, 0, 32),
+            u8_slice(hashed, 32)
+        ];
+    };
+
+    var merge = function (o1, o2) {
+        var o3 = JSON.parse(JSON.stringify(o1));
+        Object.keys(o2).forEach(function (k) {
+            o3[k] = o2[k];
+        });
+        return o3;
+    };
+
+    var u8_deriveGuestKeys = function (u8_seed2) {
+        // channel, team_curve_private, team_curve_public
+        var stretched = u8_stretch(u8_seed2);
+
+        var teamCurve = Nacl.box.keyPair.fromSecretKey(stretched[0]);
+        var u8_channel = u8_slice(stretched[1], 0, 16);
+
+        return {
+            channel: encodeHex(u8_channel),
+            teamCurvePublic: encodeBase64(teamCurve.publicKey),
+            teamCurvePrivate: encodeBase64(teamCurve.secretKey),
+        };
+    };
+
+    Team.deriveGuestKeys = function (seed2) {
+        return u8_deriveGuestKeys(decodeBase64(Crypto.b64AddSlaces(seed2)));
+    };
+
+    Team.deriveMemberKeys = function (seed1, myKeys) {
+        if (typeof(seed1) !== 'string' || seed1.length < 18) {
+            throw new Error("INVALID_SEED");
+        }
+
+        // my_keys => {myCurvePublic, myCurvePrivate}
+        if (!team_validate_own_keys(myKeys)) { throw new Error('INVALID_OWN_KEYS'); }
+
+        var stretched = u8_stretch(decodeUTF8(seed1));
+
+        // team_ed_private, team_ed_public (distributed via historyKeeper)
+        var teamEd = Nacl.sign.keyPair.fromSeed(stretched[0]);
+
+        // channel, team_curve_private, team_curve_public
+        var guestKeys = u8_deriveGuestKeys(stretched[1]);
+
+        return merge({
+            // your keys myCurvePublic, myCurvePrivate
+            myCurvePublic: myKeys.curvePublic,
+            myCurvePrivate: myKeys.curvePrivate,
+            // member keys (teamEdPrivate, teamEdPublic)
+            teamEdPrivate: teamEd.secretKey,
+            teamEdPublic: teamEd.publicKey,
+        }, guestKeys); // guest keys & info (channel, teamCurvePrivate, teamCurvePublic)
     };
 
     // returns an object
