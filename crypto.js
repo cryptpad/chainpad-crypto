@@ -235,6 +235,13 @@ var factory = function (Nacl) {
             }
             var hash = Nacl.hash(superSeed);
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
+            // under certain circumstances we want people who have edit access to also have
+            // a secondary capability conferred by a symmetric key.
+            // This secondary key should be derivable from the classic view hash,
+            // but also delegated individually without leaking any information about the editing secrets
+            // hashing the secretKey component of the signing keypair accomplishes this
+            var secondary = Nacl.hash(signKp.secretKey).subarray(0, Nacl.secretbox.keyLength);
+
             var seed2 = hash.subarray(32, 64);
             var viewKeyStr = b64Encode(seed2);
             var viewCryptor = createViewCryptor2(viewKeyStr, password);
@@ -244,6 +251,7 @@ var factory = function (Nacl) {
                 signKey: encodeBase64(signKp.secretKey),
                 validateKey: encodeBase64(signKp.publicKey),
                 cryptKey: viewCryptor.cryptKey,
+                secondaryKey: encodeBase64(secondary),
                 chanId: viewCryptor.chanId
             };
         } catch (err) {
