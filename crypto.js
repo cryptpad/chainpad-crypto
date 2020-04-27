@@ -411,7 +411,7 @@ Use-cases...
         // generate a random nonce
         var u8_nonce = Nacl.randomBytes(Nacl.box.nonceLength);
 
-        // basic symmetric encryption using named parameters to avoid misuse
+        // basic asymmetric encryption using named parameters to avoid misuse
         var u8_cipher = Nacl.box(
             u8_plain,
             u8_nonce,
