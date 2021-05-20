@@ -204,10 +204,21 @@ var factory = function (Nacl) {
             var hash = Nacl.hash(superSeed);
             var chanId = hash.subarray(0,16);
             var cryptKey = hash.subarray(16, 48);
+
+            // Under certain circumstances we want people who have view access to also have
+            // a signing capability. This is the case of forms where participants can't
+            // edit the schema (chainpad) but can push messages via another channel and need to sign
+            // them.
+            // This secondary signing key should be derivable from the classic view seed and
+            // we can always build a version 1 hash that doesn't contain this informaton.
+            var signKp2 = Nacl.sign.keyPair.fromSeed(hash.subarray(32, 64));
+
             return {
                 viewKeyStr: viewKeyStr,
                 cryptKey: cryptKey,
-                chanId: b64Encode(chanId)
+                chanId: b64Encode(chanId),
+                secondarySignKey: encodeBase64(signKp2.secretKey),
+                secondaryValidateKey: encodeBase64(signKp2.publicKey),
             };
         } catch (err) {
             console.error('[chainpad-crypto.createViewCryptor2] invalid string supplied');
@@ -252,7 +263,9 @@ var factory = function (Nacl) {
                 validateKey: encodeBase64(signKp.publicKey),
                 cryptKey: viewCryptor.cryptKey,
                 secondaryKey: encodeBase64(secondary),
-                chanId: viewCryptor.chanId
+                chanId: viewCryptor.chanId,
+                secondarySignKey: viewCryptor.secondarySignKey,
+                secondaryValidateKey: viewCryptor.secondaryValidateKey
             };
         } catch (err) {
             console.error('[chainpad-crypto.createEditCryptor2] invalid string supplied');
@@ -490,6 +503,9 @@ Use-cases...
             my_public: u8_ephemeral_keypair.publicKey,
         });
 
+        // if we have a signing key, also sign the message
+        if (keys.signingKey) { u8_sealed = Nacl.sign(u8_sealed, keys.signingKey); }
+
         // return the doubly-encrypted 'envelope' as a base64-encoded string
         return encodeBase64(u8_sealed);
     };
@@ -497,6 +513,9 @@ Use-cases...
     var openSecretLetter = Mailbox.openSecretLetter = function (b64_bundle, keys) {
         // transform the b64 ciphertext into a Uint8Array
         var u8_bundle = decodeBase64(b64_bundle);
+
+        // If the message is signed, remove the signature
+        if (keys.validateKey) { u8_bundle = u8_bundle.subarray(64); }
 
         // open the sealed envelope with your private key
         // and throw away the ephemeral key used to seal it
@@ -532,6 +551,9 @@ Use-cases...
         var u8_my_private = decodeBase64(keys.curvePrivate);
         var u8_my_public = decodeBase64(keys.curvePublic);
 
+        var signingKey = keys.signingKey ? decodeBase64(keys.signingKey) : undefined;
+        var validateKey = keys.validateKey ? decodeBase64(keys.validateKey) : undefined;
+
         return  {
             // returns a base-64 encoded ciphertext bundle
             // or null if decryption failed
@@ -543,6 +565,8 @@ Use-cases...
                 // or null if an error is thrown
                 try {
                     var sealed = sealSecretLetter(plain, {
+                        signingKey: signingKey,
+
                         their_public: u8_their_public,
 
                         my_private: u8_my_private,
@@ -562,6 +586,7 @@ Use-cases...
                 try {
                     // return { content: UTF8, author: serializedCurve }
                     return openSecretLetter(cipher, {
+                         validateKey: validateKey,
                          my_private: u8_my_private,
                     });
                 } catch (e) {
