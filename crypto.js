@@ -467,7 +467,7 @@ Use-cases...
         var u8_plain = Nacl.box.open(
             u8_cipher,
             u8_nonce,
-            u8_sender_public,
+            keys.their_public || u8_sender_public,
             keys.my_private
         );
 
@@ -493,8 +493,8 @@ Use-cases...
             my_public: keys.my_public,
         });
 
-        // generate an ephemeral keypair
-        var u8_ephemeral_keypair = Nacl.box.keyPair();
+        // generate an ephemeral keypair or use the provided one
+        var u8_ephemeral_keypair = keys.ephemeral_keypair || Nacl.box.keyPair();
 
         // seal with an ephemeral key
         var u8_sealed = asymmetric_encrypt(u8_letter, {
@@ -508,6 +508,34 @@ Use-cases...
 
         // return the doubly-encrypted 'envelope' as a base64-encoded string
         return encodeBase64(u8_sealed);
+    };
+
+    Mailbox.openOwnSecretLetter = function (b64_bundle, keys) {
+        // transform the b64 ciphertext into a Uint8Array
+        var u8_bundle = decodeBase64(b64_bundle);
+
+        // If the message is signed, remove the signature
+        // NOTE: no need to check the signature, it's already done serverside
+        if (keys.validateKey) { u8_bundle = u8_bundle.subarray(64); }
+
+        // open the sealed envelope with your ephemeral private key
+        // and throw away the ephemeral key used to seal it
+        var letter = asymmetric_decrypt(u8_bundle, {
+            my_private: keys.ephemeral_private,
+            their_public: keys.their_public
+        });
+
+        // read the internal content, remember its author
+        var u8_plain = asymmetric_decrypt(letter.content, {
+            my_private: keys.my_private,
+            their_public: keys.their_public
+        });
+
+        // return the content and author
+        return {
+            content: encodeUTF8(u8_plain.content),
+            author: encodeBase64(u8_plain.author),
+        };
     };
 
     var openSecretLetter = Mailbox.openSecretLetter = function (b64_bundle, keys) {
@@ -566,6 +594,7 @@ Use-cases...
                 try {
                     var sealed = sealSecretLetter(plain, {
                         signingKey: signingKey,
+                        ephemeral_keypair: keys.ephemeral_keypair,
 
                         their_public: u8_their_public,
 
