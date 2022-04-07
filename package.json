@@ -1,6 +1,6 @@
 {
   "name": "chainpad-crypto",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "",
   "main": "crypto.js",
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xwiki-labs/chainpad-crypto.git"
+    "url": "https://github.com/xwiki-labs/chainpad-crypto.git"
   },
   "author": "",
   "license": "AGPL-3.0+",
@@ -18,6 +18,6 @@
   },
   "homepage": "https://github.com/xwiki-labs/chainpad-crypto#readme",
   "dependencies": {
-    "tweetnacl": "git+https://github.com/dchest/tweetnacl-js.git#v0.12.2"
+    "tweetnacl": "~0.12.2"
   }
 }
