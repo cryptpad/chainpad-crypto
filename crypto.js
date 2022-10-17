@@ -104,13 +104,17 @@ var factory = function (Nacl) {
     /*
 
 * several modes of operation:
-  * if input is not an object, use some prehistoric code
+  * if input is not an object, use legacy code
   * otherwise
     * get the encryption key
     * get the signing key, if available
     * MAYBE get a validateKey
-  * return a pair of functions: {encrypt, decrypt} which "Do The Right Thing"
-    * encrypt is not necessarily provided, depending on the parameters with which the encryptor was initialized
+  * return a pair of functions: {encrypt, decrypt}
+    * Encryption contains an inner authenticated symmetric encryption and an outer signing to prove editor permissions.
+    * encrypt is not provided, if the input does not contain a signKey.
+    * Decryption verifies the ciphertext (unless skipCheck or no validateKey is passed) and decrypts it.
+    * The signature is not checked when the message comes from history keeper since it is checked server-side.
+    * If the signature does not pass, return void.
     */
     Crypto.createEncryptor = function (input) {
         var key;
@@ -127,13 +131,9 @@ var factory = function (Nacl) {
             }
 
             out.decrypt = function (msg, validateKey, skipCheck) {
-                if (!validateKey && !skipCheck) {
-                    throw new Error("UNSUPPORTED_DECRYPTION_CONFIGURATION");
-                    //return decrypt(msg, key);
-                }
-
-                if (validateKey === true && !skipCheck) {
+                if (!validateKey && !skipCheck || validateKey === true && !skipCheck) {
                     console.error("UNEXPECTED_CONFIGURATION");
+                    throw new Error("UNSUPPORTED_DECRYPTION_CONFIGURATION");
                 }
 
                 // .subarray(64) remove the signature since it's taking lots of time and it's already checked server-side.
@@ -146,6 +146,7 @@ var factory = function (Nacl) {
             };
             return out;
         }
+        // Else: Legacy code
         key = parseKey(input).cryptKey;
         return {
             encrypt: function (msg) {
@@ -160,6 +161,7 @@ var factory = function (Nacl) {
     Crypto.createEditCryptor = function (keyStr, seed) {
         try {
             if (!keyStr) {
+                // generate a new keyStr from the seed, generate the seed randomly if there is no seed passed.
                 if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
@@ -170,11 +172,11 @@ var factory = function (Nacl) {
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
             var cryptKey = hash.subarray(32, 64);
             return {
-                editKeyStr: keyStr,
-                signKey: encodeBase64(signKp.secretKey),
+                editKeyStr: keyStr, // allows read+write
+                signKey: encodeBase64(signKp.secretKey), // write key
                 validateKey: encodeBase64(signKp.publicKey),
-                cryptKey: cryptKey,
-                viewKeyStr: b64Encode(cryptKey)
+                cryptKey: cryptKey, // encrypt/decrypt key
+                viewKeyStr: b64Encode(cryptKey) // allows read-only
             };
         } catch (err) {
             console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
@@ -881,4 +883,3 @@ We assume:
         window.chainpad_crypto = factory(window.nacl);
     }
 }());
-
