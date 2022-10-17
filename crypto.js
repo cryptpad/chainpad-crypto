@@ -27,6 +27,9 @@ var factory = function (Nacl) {
     };
 */
 
+    /* Do a symmetric authenticated encryption of str under key using xsalsa20-poly1305.
+    Return the concatenated nonce and ciphertext.
+    */
     var encryptStr = function (str, key) {
         var array = decodeUTF8(str);
         var nonce = Nacl.randomBytes(24);
@@ -35,6 +38,9 @@ var factory = function (Nacl) {
         return encodeBase64(nonce) + "|" + encodeBase64(packed);
     };
 
+    /* Authenticate and decrypt a str of the form nonce|ciphertext
+    Throw an error if authentication fails.
+    */
     var decryptStr = function (str, key) {
         var arr = str.split('|');
         if (arr.length !== 2) { throw new Error(); }
@@ -69,10 +75,12 @@ var factory = function (Nacl) {
         }
     };
 
+    // Return random bytes encoded as Base64
     var rand64 = Crypto.rand64 = function (bytes) {
         return encodeBase64(Nacl.randomBytes(bytes));
     };
 
+    // Return 18 random bytes
     Crypto.genKey = function () {
         return rand64(18);
     };
