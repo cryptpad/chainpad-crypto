@@ -77,20 +77,20 @@ var factory = function (Nacl) {
         return rand64(18);
     };
 
-    var b64Encode = function (bytes) {
-        return encodeBase64(bytes).replace(/\//g, '-').replace(/=+$/g, '');
-    };
-
-    var b64Decode = function (str) {
-        return decodeBase64(str.replace(/\-/g, '/'));
-    };
-
     Crypto.b64RemoveSlashes = function (str) {
         return str.replace(/\//g, '-');
     };
 
     Crypto.b64AddSlashes = function (str) {
         return str.replace(/\-/g, '/');
+    };
+
+    var b64Encode = function (bytes) {
+        return Crypto.b64RemoveSlashes(encodeBase64(bytes)).replace(/=+$/g, '');
+    };
+
+    var b64Decode = function (str) {
+        return decodeBase64(Crypto.b64AddSlashes(str));
     };
 
     /*
