@@ -716,6 +716,9 @@ We assume:
 
     var Team = Crypto.Team = {};
 
+    // Encrypt a message that can be read by the team
+    // Encryption is done twice: once with my_curve_private and once with ephemeral keys to hide author
+    // The encrypted message is then signed to prove write rights
     var encryptForTeam = function (plain, keys) {
         // sign(curve(curve(msg, author_curve), ephemeral_curve), signing_key)
         var u8_plain = decodeUTF8(plain);
@@ -734,6 +737,7 @@ We assume:
             my_public: u8_ephemeral_keypair.publicKey,
         });
 
+        // Sign to prove write rights
         return encodeBase64(Nacl.sign(u8_outer, keys.team_ed_private));
     };
 
@@ -848,13 +852,8 @@ We assume:
     };
 
     Team.deriveMemberKeys = function (seed1, myKeys) {
-        var u8_seed1;
-        try {
-            u8_seed1 = decodeBase64(Crypto.b64AddSlashes(seed1));
-            if (u8_seed1.length < 18) { throw new Error("INVALID_SEED"); }
-        } catch (err) {
-            throw err;
-        }
+        var u8_seed1 = decodeBase64(Crypto.b64AddSlashes(seed1));
+        if (u8_seed1.length < 18) { throw new Error("INVALID_SEED"); }
 
         // my_keys => {myCurvePublic, myCurvePrivate}
         if (!team_validate_own_keys(myKeys)) { throw new Error('INVALID_OWN_KEYS'); }
