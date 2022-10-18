@@ -292,16 +292,26 @@ var factory = function (Nacl) {
         }
     };
 
+    /* Derive a FileCryptor2 from an optional keyStr and an optional password.
+    If there is no keyStr, derive it from a random seed.
+    Otherwise, the seed is implicit in the keyStr.
+    Derive the cryptKey from the hash of the concatenated password | seed.
+    There is no signingKey, as uploaded files are read-only.
+    */
     Crypto.createFileCryptor2 = function (keyStr, password) {
         try {
             var seed;
             if (!keyStr) {
+                // Generate a keyStr
                 seed = Nacl.randomBytes(18);
                 keyStr = b64Encode(seed);
             }
-            if (!seed) {
+            else {
+                // We already have an implicit seed in keyStr
                 seed = b64Decode(keyStr);
             }
+
+            // Concatenate password and seed to superSeed
             var superSeed = seed;
             if (password) {
                 var pwKey = decodeUTF8(password);
@@ -313,8 +323,8 @@ var factory = function (Nacl) {
             var chanId = hash.subarray(0,24);
             var cryptKey = hash.subarray(24, 56);
             return {
-                fileKeyStr: keyStr,
-                cryptKey: cryptKey,
+                fileKeyStr: keyStr, // allows read-only
+                cryptKey: cryptKey, // allows read-only
                 chanId: b64Encode(chanId)
             };
         } catch (err) {
