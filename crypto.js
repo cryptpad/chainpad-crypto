@@ -229,11 +229,11 @@ var factory = function (Nacl) {
             var signKp2 = Nacl.sign.keyPair.fromSeed(hash.subarray(32, 64));
 
             return {
-                viewKeyStr: viewKeyStr,
-                cryptKey: cryptKey,
+                viewKeyStr: viewKeyStr, // allows read-only
+                cryptKey: cryptKey, // encrypt/decrypt
                 chanId: b64Encode(chanId),
-                secondarySignKey: encodeBase64(signKp2.secretKey),
-                secondaryValidateKey: encodeBase64(signKp2.publicKey),
+                secondarySignKey: encodeBase64(signKp2.secretKey), // allows to answer forms
+                secondaryValidateKey: encodeBase64(signKp2.publicKey), // allows verifying of answers
             };
         } catch (err) {
             console.error('[chainpad-crypto.createViewCryptor2] invalid string supplied');
@@ -276,15 +276,15 @@ var factory = function (Nacl) {
             var viewKeyStr = b64Encode(seed2);
             var viewCryptor = createViewCryptor2(viewKeyStr, password);
             return {
-                editKeyStr: keyStr,
-                viewKeyStr: viewKeyStr,
-                signKey: encodeBase64(signKp.secretKey),
-                validateKey: encodeBase64(signKp.publicKey),
-                cryptKey: viewCryptor.cryptKey,
-                secondaryKey: encodeBase64(secondary),
+                editKeyStr: keyStr, // allows modifying the form as well as answering it.
+                viewKeyStr: viewKeyStr, // allows reading the form and answering it.
+                signKey: encodeBase64(signKp.secretKey), // allows writing the form
+                validateKey: encodeBase64(signKp.publicKey), // allows verifying writing
+                cryptKey: viewCryptor.cryptKey, // allows reading the form
+                secondaryKey: encodeBase64(secondary), // allows to read answers
                 chanId: viewCryptor.chanId,
-                secondarySignKey: viewCryptor.secondarySignKey,
-                secondaryValidateKey: viewCryptor.secondaryValidateKey
+                secondarySignKey: viewCryptor.secondarySignKey, // allows to  answer forms
+                secondaryValidateKey: viewCryptor.secondaryValidateKey // allows verifying of answers
             };
         } catch (err) {
             console.error('[chainpad-crypto.createEditCryptor2] invalid string supplied');
