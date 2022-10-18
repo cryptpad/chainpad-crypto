@@ -455,6 +455,13 @@ Use-cases...
 4. cast an authenticated vote in public
 5. use the public log as a mixnet, leaving messages for undisclosed recipients
 
+Mailbox messages are sent to the server using the WRITE_PRIVATE_MESSAGE API
+(https://github.com/xwiki-labs/cryptpad/blob/main/lib/commands/channel.js#L247)
+instead of the usual channel message semantics.
+The server strips the netflux id of the sender.
+
+This prevents anyonee from correlating which messages came from whom,
+but does not limit timing analysis (what messages were sent on which days).
 */
 
     var u8_slice = function (A, start, end) {
@@ -463,7 +470,9 @@ Use-cases...
 
     var Mailbox = Crypto.Mailbox = {};
 
-    // throws on encryption errors
+    /* throws on encryption errors
+    Return an encrypted message of the form nonce|sender.publicKey|ciphertext
+    */
     var asymmetric_encrypt = /* Mailbox.asymmetric_encrypt = */ function (u8_plain, keys) {
         // generate a random nonce
         var u8_nonce = Nacl.randomBytes(Nacl.box.nonceLength);
@@ -488,8 +497,18 @@ Use-cases...
         return u8_bundle;
     };
 
-    // INTERNAL USE ONLY
-    // throws on decryption errors
+    /* INTERNAL USE ONLY
+     throws on decryption errors
+
+     There are two ways to invoke this function:
+     1. by the sender of u8_bundle:
+       - the keys must contain keys.their_public (receiver's public key) and keys.my_private (sender's public key)
+       - the nonce is extracted from u8_bundle
+     2. by the receiver of the message
+       - the keys do only need to contain keys.my-private (receiver's public key)
+       - the sender's public key is extracted from u8_bundle
+       - the nonce is extracted from u8_bundle
+     */
     var asymmetric_decrypt = /* Crypto.asymmetric_decrypt = */ function (u8_bundle, keys) {
         // parse out the nonce
         var u8_nonce = u8_slice(u8_bundle, 0, Nacl.box.nonceLength);
@@ -508,6 +527,7 @@ Use-cases...
         );
 
         // decrypt the ciphertext using the private key
+        // depending on how the function is invoked, the public key is taken from a different source
         var u8_plain = Nacl.box.open(
             u8_cipher,
             u8_nonce,
@@ -548,6 +568,7 @@ Use-cases...
         });
 
         // if we have a signing key, also sign the message
+        // Note that the signing key is symmetric, it thus therefore NOT leake information about the owner.
         if (keys.signingKey) { u8_sealed = Nacl.sign(u8_sealed, keys.signingKey); }
 
         // return the doubly-encrypted 'envelope' as a base64-encoded string
@@ -569,7 +590,7 @@ Use-cases...
             their_public: keys.their_public
         });
 
-        // read the internal content, remember its author
+        // read the inner envelope
         var u8_plain = asymmetric_decrypt(letter.content, {
             my_private: keys.my_private,
             their_public: keys.their_public
@@ -582,11 +603,14 @@ Use-cases...
         };
     };
 
+    // open a secret letter obtained from someone else
     var openSecretLetter = Mailbox.openSecretLetter = function (b64_bundle, keys) {
         // transform the b64 ciphertext into a Uint8Array
         var u8_bundle = decodeBase64(b64_bundle);
 
         // If the message is signed, remove the signature
+        // This can be done since the signature is checked server side
+        // --> honest-but-curious threat model
         if (keys.validateKey) { u8_bundle = u8_bundle.subarray(64); }
 
         // open the sealed envelope with your private key
@@ -607,6 +631,7 @@ Use-cases...
         };
     };
 
+    // Provide encryption and decryption functions
     Mailbox.createEncryptor = function (keys) {
         // validate inputs
         if (!keys || typeof(keys) !== 'object') {
