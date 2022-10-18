@@ -27,6 +27,9 @@ var factory = function (Nacl) {
     };
 */
 
+    /* Do a symmetric authenticated encryption of str under key using xsalsa20-poly1305.
+    Return the concatenated nonce and ciphertext.
+    */
     var encryptStr = function (str, key) {
         var array = decodeUTF8(str);
         var nonce = Nacl.randomBytes(24);
@@ -35,6 +38,9 @@ var factory = function (Nacl) {
         return encodeBase64(nonce) + "|" + encodeBase64(packed);
     };
 
+    /* Authenticate and decrypt a str of the form nonce|ciphertext
+    Throw an error if authentication fails.
+    */
     var decryptStr = function (str, key) {
         var arr = str.split('|');
         if (arr.length !== 2) { throw new Error(); }
@@ -69,20 +75,14 @@ var factory = function (Nacl) {
         }
     };
 
+    // Return random bytes encoded as Base64
     var rand64 = Crypto.rand64 = function (bytes) {
         return encodeBase64(Nacl.randomBytes(bytes));
     };
 
+    // Return 18 random bytes
     Crypto.genKey = function () {
         return rand64(18);
-    };
-
-    var b64Encode = function (bytes) {
-        return encodeBase64(bytes).replace(/\//g, '-').replace(/=+$/g, '');
-    };
-
-    var b64Decode = function (str) {
-        return decodeBase64(str.replace(/\-/g, '/'));
     };
 
     Crypto.b64RemoveSlashes = function (str) {
@@ -93,16 +93,28 @@ var factory = function (Nacl) {
         return str.replace(/\-/g, '/');
     };
 
+    var b64Encode = function (bytes) {
+        return Crypto.b64RemoveSlashes(encodeBase64(bytes)).replace(/=+$/g, '');
+    };
+
+    var b64Decode = function (str) {
+        return decodeBase64(Crypto.b64AddSlashes(str));
+    };
+
     /*
 
 * several modes of operation:
-  * if input is not an object, use some prehistoric code
+  * if input is not an object, use legacy code
   * otherwise
     * get the encryption key
     * get the signing key, if available
     * MAYBE get a validateKey
-  * return a pair of functions: {encrypt, decrypt} which "Do The Right Thing"
-    * encrypt is not necessarily provided, depending on the parameters with which the encryptor was initialized
+  * return a pair of functions: {encrypt, decrypt}
+    * Encryption contains an inner authenticated symmetric encryption and an outer signing to prove editor permissions.
+    * encrypt is not provided, if the input does not contain a signKey.
+    * Decryption verifies the ciphertext (unless skipCheck or no validateKey is passed) and decrypts it.
+    * The signature is not checked when the message comes from history keeper since it is checked server-side.
+    * If the signature does not pass, return void.
     */
     Crypto.createEncryptor = function (input) {
         var key;
@@ -119,13 +131,9 @@ var factory = function (Nacl) {
             }
 
             out.decrypt = function (msg, validateKey, skipCheck) {
-                if (!validateKey && !skipCheck) {
-                    throw new Error("UNSUPPORTED_DECRYPTION_CONFIGURATION");
-                    //return decrypt(msg, key);
-                }
-
-                if (validateKey === true && !skipCheck) {
+                if (!validateKey && !skipCheck || validateKey === true && !skipCheck) {
                     console.error("UNEXPECTED_CONFIGURATION");
+                    throw new Error("UNSUPPORTED_DECRYPTION_CONFIGURATION");
                 }
 
                 // .subarray(64) remove the signature since it's taking lots of time and it's already checked server-side.
@@ -138,6 +146,7 @@ var factory = function (Nacl) {
             };
             return out;
         }
+        // Else: Legacy code
         key = parseKey(input).cryptKey;
         return {
             encrypt: function (msg) {
@@ -152,6 +161,7 @@ var factory = function (Nacl) {
     Crypto.createEditCryptor = function (keyStr, seed) {
         try {
             if (!keyStr) {
+                // generate a new keyStr from the seed, generate the seed randomly if there is no seed passed.
                 if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
@@ -162,17 +172,19 @@ var factory = function (Nacl) {
             var signKp = Nacl.sign.keyPair.fromSeed(hash.subarray(0, 32));
             var cryptKey = hash.subarray(32, 64);
             return {
-                editKeyStr: keyStr,
-                signKey: encodeBase64(signKp.secretKey),
+                editKeyStr: keyStr, // allows read+write
+                signKey: encodeBase64(signKp.secretKey), // write key
                 validateKey: encodeBase64(signKp.publicKey),
-                cryptKey: cryptKey,
-                viewKeyStr: b64Encode(cryptKey)
+                cryptKey: cryptKey, // encrypt/decrypt key
+                viewKeyStr: b64Encode(cryptKey) // allows read-only
             };
         } catch (err) {
             console.error('[chainpad-crypto.createEditCryptor] invalid string supplied');
             throw err;
         }
     };
+
+    // Generate viewKeyStr from cryptKeyStr that allows read-only.
     Crypto.createViewCryptor = function (cryptKeyStr) {
         try {
             if (!cryptKeyStr) {
@@ -188,11 +200,14 @@ var factory = function (Nacl) {
         }
     };
 
+    // Derive read-only keys and chanId from cryptKeyStr and an optional password.
     var createViewCryptor2 = Crypto.createViewCryptor2 = function (viewKeyStr, password) {
         try {
             if (!viewKeyStr) {
                 throw new Error("Cannot open a new pad in read-only mode!");
             }
+
+            // concatenate password and viewKeyStr to obtain the superSeed.
             var seed = b64Decode(viewKeyStr);
             var superSeed = seed;
             if (password) {
@@ -214,20 +229,23 @@ var factory = function (Nacl) {
             var signKp2 = Nacl.sign.keyPair.fromSeed(hash.subarray(32, 64));
 
             return {
-                viewKeyStr: viewKeyStr,
-                cryptKey: cryptKey,
+                viewKeyStr: viewKeyStr, // allows read-only
+                cryptKey: cryptKey, // encrypt/decrypt
                 chanId: b64Encode(chanId),
-                secondarySignKey: encodeBase64(signKp2.secretKey),
-                secondaryValidateKey: encodeBase64(signKp2.publicKey),
+                secondarySignKey: encodeBase64(signKp2.secretKey), // allows to answer forms
+                secondaryValidateKey: encodeBase64(signKp2.publicKey), // allows verifying of answers
             };
         } catch (err) {
             console.error('[chainpad-crypto.createViewCryptor2] invalid string supplied');
             throw err;
         }
     };
+
+    // Derive read+write keys and chanId from cryptKeyStr and an optional password.
     Crypto.createEditCryptor2 = function (keyStr, seed, password) {
         try {
             if (!keyStr) {
+                // Generate a new keyStr (and seed, if needed)
                 if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
@@ -237,6 +255,7 @@ var factory = function (Nacl) {
             if (!seed) {
                 seed = b64Decode(keyStr);
             }
+            // Concatenate password and seed to superSeed
             var superSeed = seed;
             if (password) {
                 var pwKey = decodeUTF8(password);
@@ -257,15 +276,15 @@ var factory = function (Nacl) {
             var viewKeyStr = b64Encode(seed2);
             var viewCryptor = createViewCryptor2(viewKeyStr, password);
             return {
-                editKeyStr: keyStr,
-                viewKeyStr: viewKeyStr,
-                signKey: encodeBase64(signKp.secretKey),
-                validateKey: encodeBase64(signKp.publicKey),
-                cryptKey: viewCryptor.cryptKey,
-                secondaryKey: encodeBase64(secondary),
+                editKeyStr: keyStr, // allows modifying the form as well as answering it.
+                viewKeyStr: viewKeyStr, // allows reading the form and answering it.
+                signKey: encodeBase64(signKp.secretKey), // allows writing the form
+                validateKey: encodeBase64(signKp.publicKey), // allows verifying writing
+                cryptKey: viewCryptor.cryptKey, // allows reading the form
+                secondaryKey: encodeBase64(secondary), // allows to read answers
                 chanId: viewCryptor.chanId,
-                secondarySignKey: viewCryptor.secondarySignKey,
-                secondaryValidateKey: viewCryptor.secondaryValidateKey
+                secondarySignKey: viewCryptor.secondarySignKey, // allows to  answer forms
+                secondaryValidateKey: viewCryptor.secondaryValidateKey // allows verifying of answers
             };
         } catch (err) {
             console.error('[chainpad-crypto.createEditCryptor2] invalid string supplied');
@@ -273,16 +292,26 @@ var factory = function (Nacl) {
         }
     };
 
+    /* Derive a FileCryptor2 from an optional keyStr and an optional password.
+    If there is no keyStr, derive it from a random seed.
+    Otherwise, the seed is implicit in the keyStr.
+    Derive the cryptKey from the hash of the concatenated password | seed.
+    There is no signingKey, as uploaded files are read-only.
+    */
     Crypto.createFileCryptor2 = function (keyStr, password) {
         try {
             var seed;
             if (!keyStr) {
+                // Generate a keyStr
                 seed = Nacl.randomBytes(18);
                 keyStr = b64Encode(seed);
             }
-            if (!seed) {
+            else {
+                // We already have an implicit seed in keyStr
                 seed = b64Decode(keyStr);
             }
+
+            // Concatenate password and seed to superSeed
             var superSeed = seed;
             if (password) {
                 var pwKey = decodeUTF8(password);
@@ -294,8 +323,8 @@ var factory = function (Nacl) {
             var chanId = hash.subarray(0,24);
             var cryptKey = hash.subarray(24, 56);
             return {
-                fileKeyStr: keyStr,
-                cryptKey: cryptKey,
+                fileKeyStr: keyStr, // allows read-only
+                cryptKey: cryptKey, // allows read-only
                 chanId: b64Encode(chanId)
             };
         } catch (err) {
@@ -322,6 +351,9 @@ var factory = function (Nacl) {
         return total;
     };
 
+    /* Authenticated encryption using a random nonce and shared secret
+    Return the concatenated nonce | ciphertext
+    */
     Curve.encrypt = function (message, secret) {
         var buffer = decodeUTF8(message);
         var nonce = Nacl.randomBytes(24);
@@ -329,6 +361,9 @@ var factory = function (Nacl) {
         return encodeBase64(nonce) + '|' + encodeBase64(box);
     };
 
+    /* Authenticate and decrypt packed of the form nonce|cihertext under the shared secrets
+    Return null if authentication fails, otherwise return the plaintext.
+    */
     Curve.decrypt = function (packed, secret) {
         var unpacked = packed.split('|');
         var nonce = decodeBase64(unpacked[0]);
@@ -338,16 +373,24 @@ var factory = function (Nacl) {
         return encodeUTF8(message);
     };
 
+    /* Encrypt-then-sign (function name is misleading)
+    Encrypt msg under the symmetric cryptKey and then sign using signing key.
+    Return ciphertext of the form sign(nonce|enc(msg, cryptkey))
+    */
     Curve.signAndEncrypt = function (msg, cryptKey, signKey) {
         var packed = Curve.encrypt(msg, cryptKey);
         return encodeBase64(Nacl.sign(decodeUTF8(packed), signKey));
     };
 
+    /* Remove the signature and return the decrypted ciphertext
+    We do not verify the signature since this is done by the server (honest-but-curious threat model)
+    */
     Curve.openSigned = function (msg, cryptKey /*, validateKey STUBBED*/) {
         var content = decodeBase64(msg).subarray(64);
         return Curve.decrypt(encodeUTF8(content), cryptKey);
     };
 
+    // Derive shared secrets (a symmetric key and a signing key pair) from their public key and my private key
     Curve.deriveKeys = function (theirs, mine) {
         try {
             var pub = decodeBase64(theirs);
@@ -373,6 +416,7 @@ var factory = function (Nacl) {
         }
     };
 
+    // Provide encrypt/decrypt function for keys derived from their public and my private key
     Curve.createEncryptor = function (keys) {
         if (!keys || typeof(keys) !== 'object') {
             return void console.error("invalid input for createEncryptor");
@@ -411,6 +455,13 @@ Use-cases...
 4. cast an authenticated vote in public
 5. use the public log as a mixnet, leaving messages for undisclosed recipients
 
+Mailbox messages are sent to the server using the WRITE_PRIVATE_MESSAGE API
+(https://github.com/xwiki-labs/cryptpad/blob/main/lib/commands/channel.js#L247)
+instead of the usual channel message semantics.
+The server strips the netflux id of the sender.
+
+This prevents anyonee from correlating which messages came from whom,
+but does not limit timing analysis (what messages were sent on which days).
 */
 
     var u8_slice = function (A, start, end) {
@@ -419,7 +470,9 @@ Use-cases...
 
     var Mailbox = Crypto.Mailbox = {};
 
-    // throws on encryption errors
+    /* throws on encryption errors
+    Return an encrypted message of the form nonce|sender.publicKey|ciphertext
+    */
     var asymmetric_encrypt = /* Mailbox.asymmetric_encrypt = */ function (u8_plain, keys) {
         // generate a random nonce
         var u8_nonce = Nacl.randomBytes(Nacl.box.nonceLength);
@@ -444,8 +497,18 @@ Use-cases...
         return u8_bundle;
     };
 
-    // INTERNAL USE ONLY
-    // throws on decryption errors
+    /* INTERNAL USE ONLY
+     throws on decryption errors
+
+     There are two ways to invoke this function:
+     1. by the sender of u8_bundle:
+       - the keys must contain keys.their_public (receiver's public key) and keys.my_private (sender's public key)
+       - the nonce is extracted from u8_bundle
+     2. by the receiver of the message
+       - the keys do only need to contain keys.my-private (receiver's public key)
+       - the sender's public key is extracted from u8_bundle
+       - the nonce is extracted from u8_bundle
+     */
     var asymmetric_decrypt = /* Crypto.asymmetric_decrypt = */ function (u8_bundle, keys) {
         // parse out the nonce
         var u8_nonce = u8_slice(u8_bundle, 0, Nacl.box.nonceLength);
@@ -464,6 +527,7 @@ Use-cases...
         );
 
         // decrypt the ciphertext using the private key
+        // depending on how the function is invoked, the public key is taken from a different source
         var u8_plain = Nacl.box.open(
             u8_cipher,
             u8_nonce,
@@ -504,6 +568,7 @@ Use-cases...
         });
 
         // if we have a signing key, also sign the message
+        // Note that the signing key is symmetric, it thus therefore NOT leake information about the owner.
         if (keys.signingKey) { u8_sealed = Nacl.sign(u8_sealed, keys.signingKey); }
 
         // return the doubly-encrypted 'envelope' as a base64-encoded string
@@ -525,7 +590,7 @@ Use-cases...
             their_public: keys.their_public
         });
 
-        // read the internal content, remember its author
+        // read the inner envelope
         var u8_plain = asymmetric_decrypt(letter.content, {
             my_private: keys.my_private,
             their_public: keys.their_public
@@ -538,11 +603,14 @@ Use-cases...
         };
     };
 
+    // open a secret letter obtained from someone else
     var openSecretLetter = Mailbox.openSecretLetter = function (b64_bundle, keys) {
         // transform the b64 ciphertext into a Uint8Array
         var u8_bundle = decodeBase64(b64_bundle);
 
         // If the message is signed, remove the signature
+        // This can be done since the signature is checked server side
+        // --> honest-but-curious threat model
         if (keys.validateKey) { u8_bundle = u8_bundle.subarray(64); }
 
         // open the sealed envelope with your private key
@@ -563,6 +631,7 @@ Use-cases...
         };
     };
 
+    // Provide encryption and decryption functions
     Mailbox.createEncryptor = function (keys) {
         // validate inputs
         if (!keys || typeof(keys) !== 'object') {
@@ -647,6 +716,9 @@ We assume:
 
     var Team = Crypto.Team = {};
 
+    // Encrypt a message that can be read by the team
+    // Encryption is done twice: once with my_curve_private and once with ephemeral keys to hide author
+    // The encrypted message is then signed to prove write rights
     var encryptForTeam = function (plain, keys) {
         // sign(curve(curve(msg, author_curve), ephemeral_curve), signing_key)
         var u8_plain = decodeUTF8(plain);
@@ -665,6 +737,7 @@ We assume:
             my_public: u8_ephemeral_keypair.publicKey,
         });
 
+        // Sign to prove write rights
         return encodeBase64(Nacl.sign(u8_outer, keys.team_ed_private));
     };
 
@@ -779,13 +852,8 @@ We assume:
     };
 
     Team.deriveMemberKeys = function (seed1, myKeys) {
-        var u8_seed1;
-        try {
-            u8_seed1 = decodeBase64(Crypto.b64AddSlashes(seed1));
-            if (u8_seed1.length < 18) { throw new Error("INVALID_SEED"); }
-        } catch (err) {
-            throw err;
-        }
+        var u8_seed1 = decodeBase64(Crypto.b64AddSlashes(seed1));
+        if (u8_seed1.length < 18) { throw new Error("INVALID_SEED"); }
 
         // my_keys => {myCurvePublic, myCurvePrivate}
         if (!team_validate_own_keys(myKeys)) { throw new Error('INVALID_OWN_KEYS'); }
@@ -873,4 +941,3 @@ We assume:
         window.chainpad_crypto = factory(window.nacl);
     }
 }());
-
