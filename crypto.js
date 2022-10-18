@@ -183,6 +183,8 @@ var factory = function (Nacl) {
             throw err;
         }
     };
+
+    // Generate viewKeyStr from cryptKeyStr that allows read-only.
     Crypto.createViewCryptor = function (cryptKeyStr) {
         try {
             if (!cryptKeyStr) {
@@ -198,11 +200,14 @@ var factory = function (Nacl) {
         }
     };
 
+    // Derive read-only keys and chanId from cryptKeyStr and an optional password.
     var createViewCryptor2 = Crypto.createViewCryptor2 = function (viewKeyStr, password) {
         try {
             if (!viewKeyStr) {
                 throw new Error("Cannot open a new pad in read-only mode!");
             }
+
+            // concatenate password and viewKeyStr to obtain the superSeed.
             var seed = b64Decode(viewKeyStr);
             var superSeed = seed;
             if (password) {
@@ -235,9 +240,12 @@ var factory = function (Nacl) {
             throw err;
         }
     };
+
+    // Derive read+write keys and chanId from cryptKeyStr and an optional password.
     Crypto.createEditCryptor2 = function (keyStr, seed, password) {
         try {
             if (!keyStr) {
+                // Generate a new keyStr (and seed, if needed)
                 if (seed && seed.length !== 18) {
                     throw new Error('expected supplied seed to have length of 18');
                 }
@@ -247,6 +255,7 @@ var factory = function (Nacl) {
             if (!seed) {
                 seed = b64Decode(keyStr);
             }
+            // Concatenate password and seed to superSeed
             var superSeed = seed;
             if (password) {
                 var pwKey = decodeUTF8(password);
