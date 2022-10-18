@@ -351,6 +351,9 @@ var factory = function (Nacl) {
         return total;
     };
 
+    /* Authenticated encryption using a random nonce and shared secret
+    Return the concatenated nonce | ciphertext
+    */
     Curve.encrypt = function (message, secret) {
         var buffer = decodeUTF8(message);
         var nonce = Nacl.randomBytes(24);
@@ -358,6 +361,9 @@ var factory = function (Nacl) {
         return encodeBase64(nonce) + '|' + encodeBase64(box);
     };
 
+    /* Authenticate and decrypt packed of the form nonce|cihertext under the shared secrets
+    Return null if authentication fails, otherwise return the plaintext.
+    */
     Curve.decrypt = function (packed, secret) {
         var unpacked = packed.split('|');
         var nonce = decodeBase64(unpacked[0]);
@@ -367,16 +373,24 @@ var factory = function (Nacl) {
         return encodeUTF8(message);
     };
 
+    /* Encrypt-then-sign (function name is misleading)
+    Encrypt msg under the symmetric cryptKey and then sign using signing key.
+    Return ciphertext of the form sign(nonce|enc(msg, cryptkey))
+    */
     Curve.signAndEncrypt = function (msg, cryptKey, signKey) {
         var packed = Curve.encrypt(msg, cryptKey);
         return encodeBase64(Nacl.sign(decodeUTF8(packed), signKey));
     };
 
+    /* Remove the signature and return the decrypted ciphertext
+    We do not verify the signature since this is done by the server (honest-but-curious threat model)
+    */
     Curve.openSigned = function (msg, cryptKey /*, validateKey STUBBED*/) {
         var content = decodeBase64(msg).subarray(64);
         return Curve.decrypt(encodeUTF8(content), cryptKey);
     };
 
+    // Derive shared secrets (a symmetric key and a signing key pair) from their public key and my private key
     Curve.deriveKeys = function (theirs, mine) {
         try {
             var pub = decodeBase64(theirs);
@@ -402,6 +416,7 @@ var factory = function (Nacl) {
         }
     };
 
+    // Provide encrypt/decrypt function for keys derived from their public and my private key
     Curve.createEncryptor = function (keys) {
         if (!keys || typeof(keys) !== 'object') {
             return void console.error("invalid input for createEncryptor");
