@@ -71,6 +71,28 @@ var Bob_plaintext = Bob_cryptor.decrypt(Alice_ciphertext);
 Assert.equal(message, Bob_plaintext);
 }());
 
+// FileCryptor2
+(function () {
+    var message = "FileCryptor2";
+    var password = "SuperSecretPassword";
+    var alice_cryptor = Crypto.createFileCryptor2(null, password);
+    var bob_cryptor = Crypto.createFileCryptor2(alice_cryptor.fileKeyStr, password );
+    var charlie_cryptor = Crypto.createFileCryptor2(alice_cryptor.fileKeyStr, "wrong" );
+    var diana_cryptor = Crypto.createFileCryptor2("abcd", password);
+
+    ['fileKeyStr', 'cryptKey', 'chanId'].forEach(function (k) {
+        // Alice and Bob should generate the same keys
+        Assert(alice_cryptor[k]);
+        Assert.deepStrictEqual(alice_cryptor[k], bob_cryptor[k]);
+    });
+    ['cryptKey', "chanId"].forEach(function (k) {
+        // Alice and Charlie should NOT generate the same keys (wrong password)
+        Assert.notDeepStrictEqual(alice_cryptor[k], charlie_cryptor[k]);
+        // Alice and Charlie should NOT generate the same keys (wrong password)
+        Assert.notDeepStrictEqual(alice_cryptor[k], diana_cryptor[k]);
+    });
+}());
+
 // Mailbox stuff
 
 (function () {
