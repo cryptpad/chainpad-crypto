@@ -10,6 +10,30 @@ var Bob_public = Nacl.util.encodeBase64(Bob.publicKey);
 
 var Curve = Crypto.Curve;
 
+test('Test basic Mailbox encryption with openOwnSecretLetter', function (t) {
+    // Alice wants to send a letter to Bob, but she wants to read it later.
+    var message = "It is a short test.";
+
+    var keys = {
+        my_private: Alice.secretKey,
+        my_public: Alice.publicKey,
+        their_public : Bob.publicKey,
+        ephemeral_keypair : Nacl.box.keyPair(),
+    };
+    keys.ephemeral_private = keys.ephemeral_keypair.secretKey;
+    keys.ephemeral_public = keys.ephemeral_keypair.publicKey;
+
+    // Encrypt
+    var envelope = Crypto.Mailbox.sealSecretLetter(message, keys);
+    // Decrypt
+    var letter = Crypto.Mailbox.openOwnSecretLetter(envelope, keys);
+
+    t.equal(message, letter.content, "Can decrypt own content");
+    t.equal(Alice_public, letter.author, "Author of own letter is correct");
+
+    t.end();
+});
+
 
 test('Test basic Mailbox encryption', function (t) {
     var message = "test";
@@ -32,7 +56,7 @@ test('Test basic Mailbox encryption', function (t) {
     t.end();
 });
 
-test('Test basic Mailbox encryption', function (t) {
+test('Test basic Mailbox using createEncryptor', function (t) {
     // Bob wants to drop a letter in Alice' mailbox.
 
     // Bob creates an encryptor with his base64-encoded private key
