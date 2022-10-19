@@ -33,66 +33,6 @@ var Alice_public = Nacl.util.encodeBase64(Alice.publicKey);
 var Bob = Nacl.box.keyPair();
 var Bob_public = Nacl.util.encodeBase64(Bob.publicKey);
 
-(function  () {
-var Curve = Crypto.Curve;
-
-// Basic one to one curve encryption used in CryptPad's chat
-
-// Alice and Bob can use their own private keys and the other's public key
-// to derive some shared values for their pairwise-encrypted channel
-// that includes a pre-computed secret key for curve encryption, a signing key, and a validate key
-
-// Alice derives the keys
-var Alice_set = Curve.deriveKeys(Bob_public, Nacl.util.encodeBase64(Alice.secretKey));
-
-// Bob does the same
-var Bob_set = Curve.deriveKeys(Alice_public, Nacl.util.encodeBase64(Bob.secretKey));
-
-['cryptKey', 'signKey', 'validateKey'].forEach(function (k) {
-    // these should all be strings
-    Assert.equal('string', typeof(Alice_set[k]));
-    Assert.equal('string', typeof(Bob_set[k]));
-
-    // and Alice and Bob should have exactly the same values
-    Assert.equal(Alice_set[k], Bob_set[k]);
-});
-
-var Alice_cryptor = Curve.createEncryptor(Alice_set);
-var Bob_cryptor = Curve.createEncryptor(Bob_set);
-
-// Now Alice should be able to send Bob a message
-
-var message = 'pewpewpew';
-
-var Alice_ciphertext = Alice_cryptor.encrypt(message);
-
-var Bob_plaintext = Bob_cryptor.decrypt(Alice_ciphertext);
-
-Assert.equal(message, Bob_plaintext);
-}());
-
-// FileCryptor2
-(function () {
-    var message = "FileCryptor2";
-    var password = "SuperSecretPassword";
-    var alice_cryptor = Crypto.createFileCryptor2(null, password);
-    var bob_cryptor = Crypto.createFileCryptor2(alice_cryptor.fileKeyStr, password );
-    var charlie_cryptor = Crypto.createFileCryptor2(alice_cryptor.fileKeyStr, "wrong" );
-    var diana_cryptor = Crypto.createFileCryptor2("abcd", password);
-
-    ['fileKeyStr', 'cryptKey', 'chanId'].forEach(function (k) {
-        // Alice and Bob should generate the same keys
-        Assert(alice_cryptor[k]);
-        Assert.deepStrictEqual(alice_cryptor[k], bob_cryptor[k]);
-    });
-    ['cryptKey', "chanId"].forEach(function (k) {
-        // Alice and Charlie should NOT generate the same keys (wrong password)
-        Assert.notDeepStrictEqual(alice_cryptor[k], charlie_cryptor[k]);
-        // Alice and Charlie should NOT generate the same keys (wrong password)
-        Assert.notDeepStrictEqual(alice_cryptor[k], diana_cryptor[k]);
-    });
-}());
-
 // Mailbox stuff
 
 (function () {
