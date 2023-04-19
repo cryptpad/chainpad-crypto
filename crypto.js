@@ -273,6 +273,90 @@ var factory = function (Nacl) {
         }
     };
 
+    var REVOCABLE_SEED_LENGTH = 32;
+    Crypto.createRevocable = function (data, password) {
+        var isNew = !data;
+        var decode = function (str) {
+            if (!str) { return; }
+            return decodeBase64(str);
+        };
+        // Get existing seeds or create new ones
+        var seeds = {};
+        seeds.viewer = !isNew ? decode(data.viewerSeedStr)
+                                : Nacl.randomBytes(REVOCABLE_SEED_LENGTH);
+        seeds.editor = !isNew ? decode(data.editorSeedStr)
+                                : Nacl.randomBytes(REVOCABLE_SEED_LENGTH);
+        seeds.moderator = !isNew ? decode(data.moderatorSeedStr)
+                                : Nacl.randomBytes(REVOCABLE_SEED_LENGTH);
+
+        // Append the (optional) password to the seeds
+        if (password) {
+            var pwKey = decodeUTF8(password);
+            Object.keys(seeds).forEach(function (key) {
+                if (!seeds[key]) { return; }
+                var seed = seeds[key];
+                var newSeed = new Uint8Array(seed.length + pwKey.length);
+                newSeed.set(pwKey);
+                newSeed.set(seed, pwKey.length);
+                seeds[key] = newSeed;
+            });
+        }
+
+        // Hash the seeds
+        var hashes = {};
+        Object.keys(seeds).forEach(function (key) {
+            if (!seeds[key]) { return; }
+            hashes[key] = Nacl.hash(seeds[key]);
+        });
+
+        var results = {
+            viewerSeed: seeds.viewer && encodeBase64(seeds.viewer),
+            editorSeed: seeds.editor && encodeBase64(seeds.editor),
+            moderatorSeed: seeds.moderator && encodeBase64(seeds.moderator)
+        };
+
+        results.channel = data && data.channel;
+        if (!results.channel) {
+            var docKp = Nacl.sign.keyPair();
+            results.channel = b64Encode(docKp.publicKey);
+            results.creator = encodeBase64(docKp.secretKey); // Used when creating a new channel
+        }
+
+        if (hashes.viewer) {
+            results.cryptKey = hashes.viewer.subarray(0, 32);
+        }
+
+        if (hashes.editor) {
+            var signKp = Nacl.sign.keyPair.fromSeed(hashes.editor.subarray(0, 32));
+            results.signKey = encodeBase64(signKp.secretKey);
+            results.validateKey = encodeBase64(signKp.publicKey);
+            results.secondaryKey = encodeBase64(hashes.viewer.subarray(32, 64));
+        }
+
+        if (hashes.moderator) {
+            var modKp = Nacl.box.keyPair();
+            results.moderatorCurvePublic = encodeBase64(modKp.publicKey);
+            results.moderatorCurvePrivate = encodeBase64(modKp.secretKey);
+        }
+
+        return results;
+    };
+    Crypto.createRevocableMailbox = function (seedStr) {
+        var seed = seedStr ? b64Decode(seedStr) : Nacl.randomBytes(32);
+        var hash = Nacl.hash(seed);
+        var mailboxSignKp = Nacl.sign.keyPair();
+        var mailboxKp = Nacl.box.keyPair.fromSecretKey(hash.subarray(0,32));
+        var chanId = hash.subarray(32,48);
+        return {
+            seed: b64Encode(seed), // Shared so "safe key" format
+            chanId: b64Encode(chanId),
+            curvePublic: encodeBase64(mailboxKp.publicKey),
+            curvePrivate: encodeBase64(mailboxKp.secretKey),
+            edPublic: encodeBase64(mailboxSignKp.publicKey),
+            edPrivate: encodeBase64(mailboxSignKp.secretKey),
+        };
+    };
+
     Crypto.createFileCryptor2 = function (keyStr, password) {
         try {
             var seed;
@@ -576,8 +660,8 @@ Use-cases...
             }
         });
 
-        var u8_my_private = decodeBase64(keys.curvePrivate);
-        var u8_my_public = decodeBase64(keys.curvePublic);
+        var u8_my_private = b64Decode(keys.curvePrivate);
+        var u8_my_public = b64Decode(keys.curvePublic);
 
         var signingKey = keys.signingKey ? decodeBase64(keys.signingKey) : undefined;
         var validateKey = keys.validateKey ? decodeBase64(keys.validateKey) : undefined;
