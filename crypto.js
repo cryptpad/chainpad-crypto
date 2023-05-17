@@ -862,7 +862,7 @@ We assume:
 };
 
     if (typeof(module) !== 'undefined' && module.exports) {
-        module.exports = factory(require('tweetnacl'));
+        module.exports = factory(require('tweetnacl/nacl-fast'));
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
         define([
             '/bower_components/tweetnacl/nacl-fast.min.js',
