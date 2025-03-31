@@ -1,14 +1,19 @@
 (function () {
     'use strict';
-var factory = function (Nacl) {
+var factory = function (Nacl, NaclUtil) {
     var Crypto = {
         Nacl: Nacl
     };
 
-    var encodeBase64 = Nacl.util.encodeBase64;
-    var decodeBase64 = Nacl.util.decodeBase64;
-    var decodeUTF8 = Nacl.util.decodeUTF8;
-    var encodeUTF8 = Nacl.util.encodeUTF8;
+    var encodeBase64 = NaclUtil.encodeBase64;
+    var decodeBase64 = str => {
+        let i;
+        if (i = str.length % 4) { str += '='.repeat(4-i); }
+        return NaclUtil.decodeBase64(str);
+    };
+    var decodeUTF8 = NaclUtil.decodeUTF8;
+    var encodeUTF8 = NaclUtil.encodeUTF8;
+
     var encodeHex = function (bytes) {
         var hexString = '';
         for (var i = 0; i < bytes.length; i++) {
@@ -334,7 +339,7 @@ var factory = function (Nacl) {
         var nonce = decodeBase64(unpacked[0]);
         var box = decodeBase64(unpacked[1]);
         var message = Nacl.box.open.after(box, nonce, secret);
-        if (message === false) { return null; }
+        if (!message) { return null; }
         return encodeUTF8(message);
     };
 
@@ -862,12 +867,13 @@ We assume:
 };
 
     if (typeof(module) !== 'undefined' && module.exports) {
-        module.exports = factory(require('tweetnacl/nacl-fast'));
+        module.exports = factory(require('tweetnacl/nacl-fast'), require('tweetnacl-util'));
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
         define([
-            '/bower_components/tweetnacl/nacl-fast.min.js',
+            '/components/tweetnacl/nacl-fast.min.js',
+            '/components/tweetnacl-util/nacl-util.min.js',
         ], function () {
-            return factory(window.nacl);
+            return factory(window.nacl, window.nacl?.util);
         });
     } else {
         window.chainpad_crypto = factory(window.nacl);

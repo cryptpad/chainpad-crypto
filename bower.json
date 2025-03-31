@@ -4,9 +4,11 @@
   "authors": [
     "cjd@cjdns.fr"
   ],
+  "directory" : "components",
   "description": "cryptography module for cryptpad",
   "dependencies": {
-    "tweetnacl": "~0.12.2"
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "main": "crypto.js",
   "keywords": [
