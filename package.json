@@ -9,16 +9,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Iulian-Tudor/chainpad-crypto"
+    "url": "https://github.com/xwiki-labs/chainpad-crypto.git"
   },
   "author": "",
   "license": "AGPL-3.0+",
   "bugs": {
-    "url": "https://github.com/Iulian-Tudor/chainpad-crypto/issues"
+    "url": "https://github.com/xwiki-labs/chainpad-crypto/issues"
   },
-  "homepage": "https://github.com/Iulian-Tudor/chainpad-crypto#readme",
+  "homepage": "https://github.com/xwiki-labs/chainpad-crypto#readme",
   "dependencies": {
-    "es6": "^0.0.7",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1"
   }
